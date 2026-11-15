@@ -1,0 +1,28 @@
+          PLANO TAREFAS FRUTAS E LEGUMES
+         SEMANA 9/11 a 15/11
+                                          seg 09/11        ter 10/11        qua 11/11        qui 12/11        sex 13/11        sáb 14/11        dom 15/11
+                     NOME
+                                        TAREFA    REF.   TAREFA    REF.   TAREFA    REF.   TAREFA    REF.   TAREFA    REF.   TAREFA    REF.   TAREFA    REF.
+         TURNO DA MANHÃ
+         ALVARO SANTOS                    B      09:00     A      09:00   FOLGA            FOLGA            FÉRIAS           FÉRIAS           FÉRIAS
+         ANTONIO MOTA                     S      08:00     S      08:00     S      08:00     S      08:00     S      08:00   FOLGA            FOLGA
+         TOMAS RIBEIRO                    A      10:00   FOLGA            FOLGA              A                A      09:00     A      09:00     A      09:00
+         FERNANDO VERISSIMO             FOLGA            FOLGA              B      08:30     B      08:30     B      08:30     B      08:30     B      08:30
+         GILBERTO LOPES                 FOLGA              A      12:00     A      12:00     A      12:00     A      12:00      L     11:00   FOLGA
+         HENRIQUE SOUSA                TAKEOUT   11:30     B      10:00   FOLGA            FOLGA               L     11:00     S      08:00  TAKEOUT   11:30
+         JOÃO CARMONA                     L      12:30     L      13:00     L      13:00     L      13:00   FOLGA            FOLGA               L     12:00
+         MARILIA MESQUITA               FOLGA           TAKEOUT   11:30  TAKEOUT   11:30  TAKEOUT   11:30  TAKEOUT   11:30  TAKEOUT   11:30   FOLGA
+         YASMIN SILVA                   FÉRIAS             C      10:30     A      10:00     A              FOLGA            FOLGA              C      10:30
+         PEDRO FELGUEIRAS                                                 FOLGA            FOLGA              B                B      15:30     S      12:00
+         HELENA ELEUTERIO                                                                  FOLGA            FOLGA           SALADAS   11:00  SALADAS   11:00
+         GINA MENDES                      C      10:30   FOLGA              C      10:30     C      10:30     C      10:30     C      10:30   FOLGA
+         TURNO DA TARDE
+         ANA DUARTE                       C      20:00     C      20:00     C      20:00   FOLGA            FOLGA              C      20:00     C      20:00
+         ANDREIA ANDRE                    A      18:00   FOLGA            FOLGA              C      20:00     C      20:00  TAKEOUT   19:00  TAKEOUT   19:00
+         CARLOS CHAPELAS                FÉRIAS           FÉRIAS           FOLGA            FOLGA            FÉRIAS           FÉRIAS           FÉRIAS
+         DAVID ROMAO                    FOLGA              SL     18:00     B      18:00     B      18:00     B      18:00     B      18:00   FOLGA
+         ERICA SOARES                  TAKEOUT   19:00  TAKEOUT   19:00  TAKEOUT   19:00  TAKEOUT   19:00  TAKEOUT   19:00   FOLGA            FOLGA
+         GABRYEL ALVES                  FOLGA            FOLGA              SL     19:00     SL     19:00     SL     20:00     SL     19:00     SL     18:00
+         JHONNATAN OLIVEIRA               SL     20:00     A      20:00     A      20:00     A      20:00   FOLGA            FOLGA              A      20:00
+         MARCIO CHAVES                  FOLGA              A                A                A                A                B              FOLGA
+         JORGE MARINHO                                                    FOLGA            FOLGA              A                A      20:00     A      19:00

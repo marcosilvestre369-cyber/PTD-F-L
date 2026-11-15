@@ -1,0 +1,219 @@
+{
+  "entities": {
+    "Collaborator": {
+      "title": "Collaborator",
+      "description": "Colaborador ou Administrador da secção de Frutas e Legumes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "mecanographicNumber": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "COLABORADOR", "GESTOR_STOCKS_PDE"] },
+        "status": { "type": "string", "enum": ["PENDENTE_ATIVACAO", "ATIVO", "DESATIVADO"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "mecanographicNumber", "name", "role", "status"]
+    },
+    "DailyTask": {
+      "title": "DailyTask",
+      "description": "Tarefa diária da escala de serviço (principal, secundária ou adicional)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "collaboratorId": { "type": "string" },
+        "mecanographicNumber": { "type": "string" },
+        "collaboratorName": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["PRINCIPAL", "SECUNDARIA", "ADICIONAL"] },
+        "source": { "type": "string", "enum": ["PTD", "PTS", "ADMINISTRADOR"] },
+        "status": { "type": "string", "enum": ["POR_ASSINALAR", "FEITA", "NAO_FEITA"] },
+        "time": { "type": "string" },
+        "observation": { "type": "string" },
+        "answeredAt": { "type": "string", "format": "date-time" },
+        "answeredBy": { "type": "string" }
+      },
+      "required": ["id", "mecanographicNumber", "collaboratorName", "date", "description", "type", "source", "status"]
+    },
+    "MealSchedule": {
+      "title": "MealSchedule",
+      "description": "Horário de refeição atribuído ao colaborador na escala",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "collaboratorId": { "type": "string" },
+        "mecanographicNumber": { "type": "string" },
+        "collaboratorName": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "source": { "type": "string", "enum": ["PTD", "PTS", "MANUAL"] }
+      },
+      "required": ["id", "mecanographicNumber", "collaboratorName", "date", "time", "source"]
+    },
+    "Article": {
+      "title": "Article",
+      "description": "Artigo do catálogo partilhado da secção de Frutas e Legumes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sku": { "type": "string" },
+        "description": { "type": "string" },
+        "unit": { "type": "string" },
+        "category": { "type": "string" },
+        "barcode": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "sku", "description", "unit", "category", "active"]
+    },
+    "StockRecord": {
+      "title": "StockRecord",
+      "description": "Registo operacional de excesso de stock ou rotura frequente",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "articleId": { "type": "string" },
+        "articleSku": { "type": "string" },
+        "articleDescription": { "type": "string" },
+        "type": { "type": "string", "enum": ["EXCESSO", "ROTURA"] },
+        "registrationDate": { "type": "string", "format": "date" },
+        "treatmentDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["POR_TRATAR", "TRATADO", "NAO_CONSIDERADO"] },
+        "authorId": { "type": "string" },
+        "authorNumber": { "type": "string" },
+        "authorName": { "type": "string" },
+        "boxes": { "type": "number" },
+        "dateType": { "type": "string" },
+        "customDate": { "type": "string" },
+        "resolutionNote": { "type": "string" }
+      },
+      "required": ["id", "articleId", "articleSku", "articleDescription", "type", "registrationDate", "status", "authorNumber", "authorName"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Registo de auditoria de operações realizadas na aplicação",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "mecanographicNumber": { "type": "string" },
+        "authorName": { "type": "string" },
+        "action": { "type": "string" },
+        "target": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "mecanographicNumber", "authorName", "action", "target", "details"]
+    },
+    "SectionStatistic": {
+      "title": "SectionStatistic",
+      "description": "Métricas e estatísticas diárias consolidadas da secção",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "totalTasks": { "type": "number" },
+        "completedTasks": { "type": "number" },
+        "notDoneTasks": { "type": "number" },
+        "pendingTasks": { "type": "number" },
+        "completionRate": { "type": "number" },
+        "totalStocksExcess": { "type": "number" },
+        "totalStocksRupture": { "type": "number" },
+        "totalBoxesExcess": { "type": "number" },
+        "resolvedStocks": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "date", "totalTasks", "completedTasks", "notDoneTasks", "completionRate"]
+    },
+    "PdeRequest": {
+      "title": "PdeRequest",
+      "description": "Pedido de qualidade de receção por artigo (PDE)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "articleId": { "type": "string" },
+        "sku": { "type": "string" },
+        "articleDescription": { "type": "string" },
+        "category": { "type": "string" },
+        "unit": { "type": "string" },
+        "batchNumber": { "type": "string" },
+        "arrivalDate": { "type": "string", "format": "date" },
+        "expirationDate": { "type": "string", "format": "date" },
+        "defectReason": { "type": "string" },
+        "notes": { "type": "string" },
+        "photos": { "type": "array" },
+        "submittedByNumber": { "type": "string" },
+        "submittedByName": { "type": "string" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["PENDENTE", "RESOLVIDO", "NAO_CONSIDERADO"] },
+        "resolvedAt": { "type": "string", "format": "date-time" },
+        "resolvedByNumber": { "type": "string" },
+        "resolvedByName": { "type": "string" },
+        "resolutionNotes": { "type": "string" },
+        "resolutionAction": { "type": "string" }
+      },
+      "required": ["id", "articleId", "sku", "articleDescription", "batchNumber", "arrivalDate", "expirationDate", "defectReason", "submittedByNumber", "submittedByName", "status"]
+    },
+    "InAppNotification": {
+      "title": "InAppNotification",
+      "description": "Notificação na app enviada a colaborador aquando da atribuição de tarefas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "recipientNumber": { "type": "string" },
+        "recipientName": { "type": "string" },
+        "senderNumber": { "type": "string" },
+        "senderName": { "type": "string" },
+        "category": { "type": "string", "enum": ["TAREFA", "STOCK", "PDE"] },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "taskId": { "type": "string" },
+        "stockId": { "type": "string" },
+        "pdeId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["id", "recipientNumber", "senderNumber", "senderName", "title", "message", "date", "createdAt", "read"]
+    }
+  },
+  "firestore": {
+    "/collaborators/{collaboratorId}": {
+      "schema": { "$ref": "#/entities/Collaborator" },
+      "description": "Colaboradores e administradores da secção"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/DailyTask" },
+      "description": "Tarefas diárias dos colaboradores"
+    },
+    "/meals/{mealId}": {
+      "schema": { "$ref": "#/entities/MealSchedule" },
+      "description": "Horários de refeição por dia e colaborador"
+    },
+    "/articles/{articleId}": {
+      "schema": { "$ref": "#/entities/Article" },
+      "description": "Catálogo de artigos da secção"
+    },
+    "/stocks/{stockId}": {
+      "schema": { "$ref": "#/entities/StockRecord" },
+      "description": "Registos operacionais de excessos e roturas de stock"
+    },
+    "/audits/{auditId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Histórico de auditoria do sistema"
+    },
+    "/statistics/{statId}": {
+      "schema": { "$ref": "#/entities/SectionStatistic" },
+      "description": "Estatísticas diárias agregadas da secção"
+    },
+    "/pdes/{pdeId}": {
+      "schema": { "$ref": "#/entities/PdeRequest" },
+      "description": "Pedidos de qualidade de artigos (PDE)"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/InAppNotification" },
+      "description": "Notificações na aplicação para os colaboradores"
+    }
+  }
+}

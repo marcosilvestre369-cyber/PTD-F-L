@@ -1,0 +1,6 @@
+{
+  "name": "Gestão Diária da Secção - Frutas e Legumes",
+  "description": "Web app de gestão diária da secção: tarefas diárias, horário de refeição, controlo de excessos e roturas de stocks e relatório diário com exportação PDF.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

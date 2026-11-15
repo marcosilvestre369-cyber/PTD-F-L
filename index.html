@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gestão Diária da Secção - Frutas e Legumes</title>
+    <meta name="description" content="Web app de gestão diária da secção: tarefas diárias, horário de refeição, controlo de excessos e roturas de stocks e relatório diário com exportação PDF." />
+    <meta property="og:title" content="Gestão Diária da Secção - Frutas e Legumes" />
+    <meta property="og:description" content="Web app de gestão diária da secção: tarefas diárias, horário de refeição, controlo de excessos e roturas de stocks e relatório diário com exportação PDF." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('fl_theme');
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = saved ? saved === 'dark' : prefersDark;
+          document.documentElement.classList.toggle('dark', isDark);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="bg-surface text-on-surface antialiased selection:bg-amber-brand/30 selection:text-on-surface">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

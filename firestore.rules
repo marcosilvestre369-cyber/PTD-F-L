@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.role == 'ADMIN' ||
+         exists(/databases/$(database)/documents/collaborators/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/collaborators/$(request.auth.uid)).data.role == 'ADMIN');
+    }
+
+    // Default catch-all denies everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Colaboradores
+    match /collaborators/{colabId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Tarefas
+    match /tasks/{taskId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Refeições
+    match /meals/{mealId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Catálogo de Artigos
+    match /articles/{articleId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Registos de Stock (Excessos e Roturas)
+    match /stocks/{stockId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Auditoria
+    match /audits/{auditId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Estatísticas e Métricas da Secção
+    match /statistics/{statId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Pedidos de Qualidade de Artigos (PDE)
+    match /pdes/{pdeId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Notificações na App
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

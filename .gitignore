@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+
+# Ficheiros de ambiente e segredos locais
+.env
+.env.*
+.env*.local
+!.env.example
+
+# Configuração local de credenciais Firebase e dados locais de runtime
+firebase-applet-config.json
+data/store.json
+data/*.tmp
