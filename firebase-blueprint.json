@@ -176,6 +176,28 @@
         "read": { "type": "boolean" }
       },
       "required": ["id", "recipientNumber", "senderNumber", "senderName", "title", "message", "date", "createdAt", "read"]
+    },
+    "ImportRecord": {
+      "title": "ImportRecord",
+      "description": "Histórico e linhas originais de importações de escalas PTD e PTS (Excel/PDF)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sourceType": { "type": "string", "enum": ["PTD", "PTS"] },
+        "week": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileHash": { "type": "string" },
+        "version": { "type": "number" },
+        "status": { "type": "string", "enum": ["CARREGADO", "EM_REVISAO", "PUBLICADO", "ANULADO", "FALHOU"] },
+        "uploadedAt": { "type": "string", "format": "date-time" },
+        "uploadedBy": { "type": "string" },
+        "publishedAt": { "type": "string", "format": "date-time" },
+        "publishedBy": { "type": "string" },
+        "rowCount": { "type": "number" },
+        "warnings": { "type": "array" },
+        "rows": { "type": "array" }
+      },
+      "required": ["id", "sourceType", "week", "fileName", "status", "uploadedAt", "uploadedBy"]
     }
   },
   "firestore": {
@@ -214,6 +236,10 @@
     "/notifications/{notificationId}": {
       "schema": { "$ref": "#/entities/InAppNotification" },
       "description": "Notificações na aplicação para os colaboradores"
+    },
+    "/imports/{importId}": {
+      "schema": { "$ref": "#/entities/ImportRecord" },
+      "description": "Registos e escalas de importações Excel/PDF (PTD e PTS)"
     }
   }
 }

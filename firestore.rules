@@ -72,5 +72,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // Importações de Escalas (Excel / PDF)
+    match /imports/{importId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

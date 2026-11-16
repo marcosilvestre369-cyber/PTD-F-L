@@ -110,6 +110,16 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+// Garantir que a hidratação inicial do Firestore terminou antes de responder às rotas de API
+app.use('/api', async (_req: Request, _res: Response, next: NextFunction) => {
+  try {
+    await storage.ready();
+  } catch (err) {
+    console.warn('[API] Aviso na hidratação inicial:', err);
+  }
+  next();
+});
+
 // 1. Autenticação e Acessos
 app.post('/api/auth/login', (req: Request, res: Response) => {
   const { mecanographicNumber } = req.body;
@@ -247,9 +257,9 @@ app.get('/api/weeks/dates', authenticateToken, (req: AuthenticatedRequest, res: 
   return res.json(dates);
 });
 
-app.post('/api/weeks/add-next', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/weeks/add-next', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
   const { weekLabel } = req.body;
-  const result = storage.addNextWeek(weekLabel || 'Semana 16/11 a 22/11', req.user!);
+  const result = await storage.addNextWeek(weekLabel || 'Semana 16/11 a 22/11', req.user!);
   if (!result.success) {
     return res.status(400).json({ error: 'Erro ao adicionar tarefas da semana seguinte.' });
   }
@@ -500,7 +510,7 @@ app.post('/api/imports/preview', authenticateToken, requireRole(['ADMIN']), (req
   return res.json(result);
 });
 
-app.post('/api/imports/publish', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/imports/publish', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
   const { sourceType, week, fileName, fileHash } = req.body;
   const collaborators = storage.getCollaborators(false);
   const parsed = parseScheduleFile(sourceType, week || 'Semana 9/11 a 15/11', collaborators);
@@ -520,7 +530,7 @@ app.post('/api/imports/publish', authenticateToken, requireRole(['ADMIN']), (req
     rows: parsed.previewRows,
   };
 
-  const publishResult = storage.publishImport(
+  const publishResult = await storage.publishImport(
     importRecord,
     parsed.generatedTasks,
     parsed.generatedMeals,
@@ -540,8 +550,8 @@ app.post('/api/imports/publish', authenticateToken, requireRole(['ADMIN']), (req
   });
 });
 
-app.post('/api/imports/:id/revert', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
-  const result = storage.revertImport(req.params.id, req.user!);
+app.post('/api/imports/:id/revert', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+  const result = await storage.revertImport(req.params.id, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
@@ -686,7 +696,7 @@ app.post('/api/imports/excel-csv/preview', authenticateToken, requireRole(['ADMI
   }
 });
 
-app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
   const { fileBase64, fileName, sourceType, week, explicitWeekSelected } = req.body as {
     fileBase64?: string;
     fileName?: string;
@@ -748,7 +758,7 @@ app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMI
         rows: ptdRows,
       };
 
-      const pubPtd = storage.publishSpreadsheetImport(ptdRecord, ptdTasks, ptdMeals, req.user!);
+      const pubPtd = await storage.publishSpreadsheetImport(ptdRecord, ptdTasks, ptdMeals, req.user!);
       if (!pubPtd.success) {
         return res.status(400).json({ error: pubPtd.error });
       }
@@ -776,7 +786,7 @@ app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMI
         rows: ptsRows,
       };
 
-      const pubPts = storage.publishSpreadsheetImport(ptsRecord, ptsTasks, [], req.user!);
+      const pubPts = await storage.publishSpreadsheetImport(ptsRecord, ptsTasks, [], req.user!);
       if (!pubPts.success) {
         return res.status(400).json({ error: pubPts.error });
       }

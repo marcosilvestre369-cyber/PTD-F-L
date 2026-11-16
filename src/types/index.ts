@@ -221,6 +221,10 @@ export interface CollaboratorTaskSummary {
   notDoneTasks: number;
   pendingTasks: number;
   completionRate: number;
+  weeklyCompletionRate?: number;
+  weeklyCompletedTasks?: number;
+  weeklyTotalTasks?: number;
+  weeklyLabel?: string;
   annualScore?: CollaboratorAnnualScore;
 }
 

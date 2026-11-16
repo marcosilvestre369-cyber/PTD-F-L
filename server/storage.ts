@@ -26,7 +26,15 @@ import {
   INITIAL_COLLABORATORS,
   INITIAL_ARTICLES,
 } from './initialData.ts';
-import { syncAllToFirestore, syncDocument, deleteDocument, loadAllFromFirestore, getFirebaseConfigInfo } from './firebaseSync.ts';
+import {
+  syncAllToFirestore,
+  syncDocument,
+  deleteDocument,
+  syncDocumentsBatch,
+  deleteDocumentsBatch,
+  loadAllFromFirestore,
+  getFirebaseConfigInfo,
+} from './firebaseSync.ts';
 import type { DailyStatistic } from './firebaseSync.ts';
 
 export interface LisbonDateTimeParts {
@@ -138,6 +146,8 @@ const DATA_FILE = path.join(DATA_DIR, 'store.json');
 class StorageManager {
   private store: AppStore;
   private isLoaded = false;
+  private hadLocalStore = false;
+  private hydrationPromise: Promise<void> = Promise.resolve();
 
   constructor() {
     this.store = {
@@ -152,6 +162,10 @@ class StorageManager {
       notifications: [],
     };
     this.init();
+  }
+
+  public async ready(): Promise<void> {
+    await this.hydrationPromise;
   }
 
   private init() {
@@ -221,6 +235,7 @@ class StorageManager {
           );
         }
 
+        this.hadLocalStore = true;
         this.save();
       } else {
         // Inicialização sem escalas, tarefas, horários de refeição ou stocks de exemplo
@@ -251,81 +266,8 @@ class StorageManager {
       }
       this.isLoaded = true;
 
-      // Hidratação a partir da base de dados Firestore e sincronização bidirecional
-      setTimeout(async () => {
-        try {
-          const remote = await loadAllFromFirestore();
-          if (remote) {
-            let changed = false;
-
-            if (remote.tasks && remote.tasks.length > 0) {
-              const taskMap = new Map(this.store.tasks.map(t => [t.id, t]));
-              for (const rt of remote.tasks) {
-                taskMap.set(rt.id, rt);
-              }
-              this.store.tasks = Array.from(taskMap.values());
-              changed = true;
-            }
-
-            if (remote.meals && remote.meals.length > 0) {
-              const mealMap = new Map(this.store.meals.map(m => [m.id, m]));
-              for (const rm of remote.meals) {
-                mealMap.set(rm.id, rm);
-              }
-              this.store.meals = Array.from(mealMap.values());
-              changed = true;
-            }
-
-            if (remote.stocks && remote.stocks.length > 0) {
-              const stockMap = new Map(this.store.stocks.map(s => [s.id, s]));
-              for (const rs of remote.stocks) {
-                rs.status = normalizeStockStatus(rs.status as string);
-                stockMap.set(rs.id, rs);
-              }
-              this.store.stocks = Array.from(stockMap.values());
-              changed = true;
-            }
-
-            if (remote.pdes && remote.pdes.length > 0) {
-              const pdeMap = new Map(this.store.pdes.map(p => [p.id, p]));
-              for (const rp of remote.pdes) {
-                rp.status = normalizePdeStatus(rp.status as string);
-                pdeMap.set(rp.id, rp);
-              }
-              this.store.pdes = Array.from(pdeMap.values());
-              changed = true;
-            }
-
-            if (remote.notifications && remote.notifications.length > 0) {
-              const notifMap = new Map(this.store.notifications.map(n => [n.id, n]));
-              for (const rn of remote.notifications) {
-                notifMap.set(rn.id, rn);
-              }
-              this.store.notifications = Array.from(notifMap.values());
-              changed = true;
-            }
-
-            if (this.migrateCollaboratorNumber('56813', '508913', 'HENRIQUE SOUSA')) {
-              changed = true;
-            }
-            if (remote.collaborators?.some(c => c.id === 'colab-56813')) {
-              deleteDocument('collaborators', 'colab-56813');
-            }
-
-            if (changed) {
-              this.save();
-              console.log('[Storage] Base de dados sincronizada com sucesso a partir do Firestore.');
-            }
-          }
-        } catch (err) {
-          console.warn('[Storage] Erro ao sincronizar a partir do Firestore:', err);
-        }
-
-        // Sincronizar todos os documentos locais existentes com o Firestore
-        syncAllToFirestore(this.store).catch(err => {
-          console.warn('[Firebase] Erro ao sincronizar com Firestore:', err);
-        });
-      }, 300);
+      // Hidratação imediata a partir da base de dados Firestore e sincronização bidirecional
+      this.hydrationPromise = this.hydrateFromFirestore();
     } catch (err) {
       console.error('Erro ao inicializar storage:', err);
       this.store = {
@@ -340,6 +282,157 @@ class StorageManager {
         notifications: [],
       };
     }
+  }
+
+  private async hydrateFromFirestore(): Promise<void> {
+    let remoteArticlesCount = 0;
+    try {
+      const remote = await loadAllFromFirestore();
+      if (remote) {
+        let changed = false;
+        remoteArticlesCount = remote.articles?.length || 0;
+
+        // 1. Colaboradores (preservar edições/adições/remoções guardadas na nuvem)
+        if (remote.collaborators && remote.collaborators.length > 0) {
+          if (!this.hadLocalStore) {
+            this.store.collaborators = [...remote.collaborators];
+          } else {
+            const colabMap = new Map(this.store.collaborators.map(c => [c.id, c]));
+            for (const rc of remote.collaborators) {
+              const local = colabMap.get(rc.id);
+              if (!local || (rc.updatedAt || '') >= (local.updatedAt || '')) {
+                colabMap.set(rc.id, rc);
+              }
+            }
+            this.store.collaborators = Array.from(colabMap.values());
+          }
+          // Garantir consistência das regras permanentes de colaboradores
+          const yasmin = this.store.collaborators.find(c => c.mecanographicNumber === '436450');
+          if (yasmin && yasmin.role !== 'COLABORADOR') {
+            yasmin.role = 'COLABORADOR';
+            yasmin.updatedAt = new Date().toISOString();
+          }
+          this.store.collaborators.forEach(c => {
+            if (c.status === 'PENDENTE_ATIVACAO') c.status = 'ATIVO';
+          });
+          changed = true;
+        }
+
+        // 2. Artigos do catálogo
+        if (remote.articles && remote.articles.length > 0) {
+          const artMap = new Map(this.store.articles.map(a => [a.id, a]));
+          for (const ra of remote.articles) {
+            const local = artMap.get(ra.id);
+            if (!local || (ra.updatedAt || '') >= (local.updatedAt || '')) {
+              artMap.set(ra.id, ra);
+            }
+          }
+          this.store.articles = Array.from(artMap.values());
+          changed = true;
+        }
+
+        // 3. Tarefas
+        if (remote.tasks && remote.tasks.length > 0) {
+          const taskMap = new Map(this.store.tasks.map(t => [t.id, t]));
+          for (const rt of remote.tasks) {
+            if (rt.mecanographicNumber !== '56359') {
+              taskMap.set(rt.id, rt);
+            }
+          }
+          this.store.tasks = Array.from(taskMap.values());
+          changed = true;
+        }
+
+        // 4. Refeições
+        if (remote.meals && remote.meals.length > 0) {
+          const mealMap = new Map(this.store.meals.map(m => [m.id, m]));
+          for (const rm of remote.meals) {
+            if (rm.mecanographicNumber !== '56359') {
+              mealMap.set(rm.id, rm);
+            }
+          }
+          this.store.meals = Array.from(mealMap.values());
+          changed = true;
+        }
+
+        // 5. Stocks
+        if (remote.stocks && remote.stocks.length > 0) {
+          const stockMap = new Map(this.store.stocks.map(s => [s.id, s]));
+          for (const rs of remote.stocks) {
+            rs.status = normalizeStockStatus(rs.status as string);
+            stockMap.set(rs.id, rs);
+          }
+          this.store.stocks = Array.from(stockMap.values());
+          changed = true;
+        }
+
+        // 6. PDEs
+        if (remote.pdes && remote.pdes.length > 0) {
+          const pdeMap = new Map(this.store.pdes.map(p => [p.id, p]));
+          for (const rp of remote.pdes) {
+            rp.status = normalizePdeStatus(rp.status as string);
+            pdeMap.set(rp.id, rp);
+          }
+          this.store.pdes = Array.from(pdeMap.values());
+          changed = true;
+        }
+
+        // 7. Notificações
+        if (remote.notifications && remote.notifications.length > 0) {
+          const notifMap = new Map(this.store.notifications.map(n => [n.id, n]));
+          for (const rn of remote.notifications) {
+            notifMap.set(rn.id, rn);
+          }
+          this.store.notifications = Array.from(notifMap.values());
+          changed = true;
+        }
+
+        // 8. Importações (Excel / PDF e linhas de Folga/Férias)
+        if (remote.imports && remote.imports.length > 0) {
+          const importMap = new Map(this.store.imports.map(i => [i.id, i]));
+          for (const ri of remote.imports) {
+            importMap.set(ri.id, ri);
+          }
+          this.store.imports = Array.from(importMap.values()).sort(
+            (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+          );
+          changed = true;
+        }
+
+        // 9. Auditoria
+        if (remote.audits && remote.audits.length > 0) {
+          const auditMap = new Map(this.store.audits.map(a => [a.id, a]));
+          for (const ra of remote.audits) {
+            auditMap.set(ra.id, ra);
+          }
+          this.store.audits = Array.from(auditMap.values()).sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+          changed = true;
+        }
+
+        if (this.migrateCollaboratorNumber('56813', '508913', 'HENRIQUE SOUSA')) {
+          changed = true;
+        }
+        if (remote.collaborators?.some(c => c.id === 'colab-56813')) {
+          await deleteDocument('collaborators', 'colab-56813');
+        }
+
+        if (changed) {
+          this.save();
+          console.log('[Storage] Base de dados hidratada com sucesso a partir do Firestore.');
+        }
+      }
+    } catch (err) {
+      console.warn('[Storage] Erro ao sincronizar a partir do Firestore:', err);
+    }
+
+    // Garantir que dados locais (ou catálogo inicial) fiquem sincronizados no Firestore
+    syncAllToFirestore(this.store, {
+      includeArticles: remoteArticlesCount < this.store.articles.length,
+    }).catch(err => {
+      console.warn('[Firebase] Erro ao sincronizar com Firestore:', err);
+    });
   }
 
   private save() {
@@ -368,6 +461,9 @@ class StorageManager {
     };
     this.store.audits.unshift(entry);
     this.save();
+    if (entry.action !== 'BOOTSTRAP') {
+      syncDocument('audits', entry.id, entry);
+    }
   }
 
   public getAudits(): AuditLog[] {
@@ -459,7 +555,7 @@ class StorageManager {
   }
 
   // --- Adicionar Tarefas da Semana Seguinte (16/11 a 22/11) ---
-  public addNextWeek(weekLabel: string, author: Collaborator): { success: boolean; tasksCount: number } {
+  public async addNextWeek(weekLabel: string, author: Collaborator): Promise<{ success: boolean; tasksCount: number }> {
     const nextWeekDates = [
       '2026-11-16',
       '2026-11-17',
@@ -532,7 +628,7 @@ class StorageManager {
     this.store.meals.push(...newMeals);
 
     // Registar importação da semana seguinte
-    this.store.imports.unshift({
+    const nextImp: ImportRecord = {
       id: `imp-${Date.now()}`,
       sourceType: 'PTD',
       week: weekLabel || 'Semana 16/11 a 22/11',
@@ -547,7 +643,8 @@ class StorageManager {
       rowCount: newTasks.length,
       warnings: [],
       rows: [],
-    });
+    };
+    this.store.imports.unshift(nextImp);
 
     this.logAudit(
       author.mecanographicNumber,
@@ -557,6 +654,13 @@ class StorageManager {
       `Adicionadas tarefas da semana ${weekLabel} (${newTasks.length} tarefas criadas)`
     );
     this.save();
+
+    await Promise.all([
+      syncDocument('imports', nextImp.id, nextImp),
+      syncDocumentsBatch('tasks', newTasks),
+      syncDocumentsBatch('meals', newMeals),
+    ]);
+
     return { success: true, tasksCount: newTasks.length };
   }
 
@@ -931,6 +1035,7 @@ class StorageManager {
     if (!target) return;
     target.lastLoginAt = new Date().toISOString();
     this.save();
+    syncDocument('collaborators', target.id, target);
   }
 
   // --- Tarefas diárias ---
@@ -1211,6 +1316,7 @@ class StorageManager {
     this.store.articles.push(newArticle);
     this.logAudit(author.mecanographicNumber, author.name, 'ADICIONAR_ARTIGO', 'Catálogo', `Artigo adicionado: [${skuClean}] ${newArticle.description}`);
     this.save();
+    syncDocument('articles', newArticle.id, newArticle);
     return { success: true, article: newArticle };
   }
 
@@ -1231,6 +1337,7 @@ class StorageManager {
 
     this.logAudit(author.mecanographicNumber, author.name, 'ATUALIZAR_ARTIGO', 'Catálogo', `Artigo atualizado: [${article.sku}] ${article.description}`);
     this.save();
+    syncDocument('articles', article.id, article);
     return { success: true, article };
   }
 
@@ -1603,8 +1710,19 @@ class StorageManager {
       notConsideredCount: dayPdes.filter(p => p.status === 'NAO_CONSIDERADO').length,
     };
 
-    // 3. Desempenho de tarefas e pontuação anual por colaborador
-    const reportYear = /^\d{4}/.test(date) ? date.slice(0, 4) : String(getLisbonDateTimeParts().year);
+    // 3. Desempenho de tarefas (dia/período e semana) e IPA anual por colaborador
+    const lisbonNow = getLisbonDateTimeParts();
+    const reportYear = /^\d{4}/.test(date) ? date.slice(0, 4) : String(lisbonNow.year);
+    let weekRefDate = lisbonNow.dateStr;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      weekRefDate = date;
+    } else if (/^\d{4}-\d{2}$/.test(date)) {
+      weekRefDate = lisbonNow.dateStr.startsWith(date) ? lisbonNow.dateStr : `${date}-01`;
+    } else if (/^\d{4}$/.test(date)) {
+      weekRefDate = lisbonNow.dateStr.startsWith(date) ? lisbonNow.dateStr : `${date}-01-01`;
+    }
+    const weekBounds = getWeekBoundsFromDate(weekRefDate, Number(reportYear) || lisbonNow.year);
+
     const periodTasks = (this.store.tasks || []).filter(t => matchesPeriod(t.date));
     const activeCollaborators = this.store.collaborators.filter(c => c.status === 'ATIVO');
 
@@ -1656,11 +1774,23 @@ class StorageManager {
 
     const collaboratorTasks = Array.from(colabMap.values())
       .filter(item => item.totalTasks > 0)
-      .map(item => ({
-        ...item,
-        completionRate: item.totalTasks > 0 ? Math.round((item.completedTasks / item.totalTasks) * 100) : 0,
-        annualScore: this.getCollaboratorAnnualScore(item.mecanographicNumber, reportYear),
-      }))
+      .map(item => {
+        const weekStats = this.getWeeklyTaskCompletion(
+          weekBounds.weekStart,
+          weekBounds.weekEnd,
+          weekBounds.weekLabel,
+          item.mecanographicNumber
+        );
+        return {
+          ...item,
+          completionRate: item.totalTasks > 0 ? Math.round((item.completedTasks / item.totalTasks) * 100) : 0,
+          weeklyCompletionRate: weekStats.completionRate,
+          weeklyCompletedTasks: weekStats.completedTasks,
+          weeklyTotalTasks: weekStats.totalTasks,
+          weeklyLabel: weekStats.weekLabel,
+          annualScore: this.getCollaboratorAnnualScore(item.mecanographicNumber, reportYear),
+        };
+      })
       .sort((a, b) => b.totalTasks - a.totalTasks || a.name.localeCompare(b.name));
 
     const totalTasksCount = periodTasks.length;
@@ -1717,12 +1847,12 @@ class StorageManager {
     return this.store.imports;
   }
 
-  public publishImport(
+  public async publishImport(
     importRecord: ImportRecord,
     newTasks: DailyTask[],
     newMeals: MealSchedule[],
     author: Collaborator
-  ): { success: boolean; error?: string } {
+  ): Promise<{ success: boolean; error?: string }> {
     // Preservar tarefas adicionais
     const existingTasksMap = new Map<string, DailyTask>();
     for (const t of this.store.tasks) {
@@ -1730,12 +1860,15 @@ class StorageManager {
       existingTasksMap.set(key, t);
     }
 
+    const removedTaskIds: string[] = [];
     this.store.tasks = this.store.tasks.filter(t => {
       if (t.type === 'ADICIONAL') return true;
       if (t.source !== importRecord.sourceType) return true;
+      removedTaskIds.push(t.id);
       return false;
     });
 
+    const addedTasks: DailyTask[] = [];
     for (const nt of newTasks) {
       // Requisito: Administradores não estão presentes nas tarefas operacionais
       if (nt.mecanographicNumber === '56359') continue;
@@ -1750,10 +1883,19 @@ class StorageManager {
         nt.history = [...prev.history];
       }
       this.store.tasks.push(nt);
+      addedTasks.push(nt);
     }
 
-    this.store.meals = this.store.meals.filter(m => m.source !== importRecord.sourceType);
-    this.store.meals.push(...newMeals.filter(m => m.mecanographicNumber !== '56359'));
+    const removedMealIds: string[] = [];
+    this.store.meals = this.store.meals.filter(m => {
+      if (m.source === importRecord.sourceType) {
+        removedMealIds.push(m.id);
+        return false;
+      }
+      return true;
+    });
+    const validMeals = newMeals.filter(m => m.mecanographicNumber !== '56359');
+    this.store.meals.push(...validMeals);
 
     importRecord.status = 'PUBLICADO';
     importRecord.publishedAt = new Date().toISOString();
@@ -1763,7 +1905,7 @@ class StorageManager {
     if (idx >= 0) {
       this.store.imports[idx] = importRecord;
     } else {
-      this.store.imports.push(importRecord);
+      this.store.imports.unshift(importRecord);
     }
 
     this.logAudit(
@@ -1771,18 +1913,36 @@ class StorageManager {
       author.name,
       'PUBLICAR_IMPORTACAO',
       'Importação',
-      `Publicado ${importRecord.sourceType} [${importRecord.week}] com ${newTasks.length} tarefas e ${newMeals.length} refeições`
+      `Publicado ${importRecord.sourceType} [${importRecord.week}] com ${addedTasks.length} tarefas e ${validMeals.length} refeições`
     );
     this.save();
+
+    const newTaskIds = new Set(addedTasks.map(t => t.id));
+    const newMealIds = new Set(validMeals.map(m => m.id));
+    await Promise.all([
+      syncDocument('imports', importRecord.id, importRecord),
+      deleteDocumentsBatch('tasks', removedTaskIds.filter(id => !newTaskIds.has(id))),
+      deleteDocumentsBatch('meals', removedMealIds.filter(id => !newMealIds.has(id))),
+      syncDocumentsBatch('tasks', addedTasks),
+      syncDocumentsBatch('meals', validMeals),
+    ]);
+
     return { success: true };
   }
 
-  public revertImport(importId: string, author: Collaborator): { success: boolean; error?: string } {
+  public async revertImport(importId: string, author: Collaborator): Promise<{ success: boolean; error?: string }> {
     const target = this.store.imports.find(i => i.id === importId);
     if (!target) return { success: false, error: 'Importação não encontrada.' };
 
     target.status = 'ANULADO';
-    this.store.tasks = this.store.tasks.filter(t => t.importId !== importId);
+    const removedTaskIds: string[] = [];
+    this.store.tasks = this.store.tasks.filter(t => {
+      if (t.importId === importId) {
+        removedTaskIds.push(t.id);
+        return false;
+      }
+      return true;
+    });
 
     this.logAudit(
       author.mecanographicNumber,
@@ -1792,6 +1952,12 @@ class StorageManager {
       `Anulada importação ${target.fileName} (${target.sourceType} - ${target.week})`
     );
     this.save();
+
+    await Promise.all([
+      syncDocument('imports', target.id, target),
+      deleteDocumentsBatch('tasks', removedTaskIds),
+    ]);
+
     return { success: true };
   }
 
@@ -2069,12 +2235,12 @@ class StorageManager {
     return { success: true };
   }
 
-  public publishSpreadsheetImport(
+  public async publishSpreadsheetImport(
     importRecord: ImportRecord,
     tasks: DailyTask[],
     meals: MealSchedule[],
     user: Collaborator
-  ): { success: boolean; error?: string } {
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       importRecord.status = 'PUBLICADO';
       importRecord.publishedAt = new Date().toISOString();
@@ -2124,7 +2290,8 @@ class StorageManager {
 
       // Substituir horários de refeição da mesma fonte nas datas importadas
       const removedMealIds: string[] = [];
-      if (importRecord.sourceType === 'PTD' || meals.length > 0) {
+      const validMeals = meals.filter(m => m.mecanographicNumber !== '56359');
+      if (importRecord.sourceType === 'PTD' || validMeals.length > 0) {
         this.store.meals = this.store.meals.filter(m => {
           if (m.source === importRecord.sourceType && affectedDates.has(m.date)) {
             removedMealIds.push(m.id);
@@ -2132,7 +2299,7 @@ class StorageManager {
           }
           return true;
         });
-        this.store.meals = [...meals.filter(m => m.mecanographicNumber !== '56359'), ...this.store.meals];
+        this.store.meals = [...validMeals, ...this.store.meals];
       }
 
       this.logAudit(
@@ -2140,30 +2307,22 @@ class StorageManager {
         user.name,
         'PUBLICAR_IMPORTACAO_EXCEL',
         'Importações',
-        `Importação ${importRecord.sourceType} (${importRecord.fileName}) publicada: ${preparedTasks.length} tarefas e ${meals.length} refeições`
+        `Importação ${importRecord.sourceType} (${importRecord.fileName}) publicada: ${preparedTasks.length} tarefas e ${validMeals.length} refeições`
       );
 
       this.saveDirect();
 
-      // Remover documentos substituídos cujo ID já não existe
       const newTaskIds = new Set(preparedTasks.map(t => t.id));
-      for (const oldId of removedTaskIds) {
-        if (!newTaskIds.has(oldId)) deleteDocument('tasks', oldId);
-      }
-      const newMealIds = new Set(meals.map(m => m.id));
-      for (const oldId of removedMealIds) {
-        if (!newMealIds.has(oldId)) deleteDocument('meals', oldId);
-      }
+      const newMealIds = new Set(validMeals.map(m => m.id));
 
-      // Sincronizar com Firestore
-      for (const t of preparedTasks) {
-        syncDocument('tasks', t.id, t);
-      }
-      for (const m of meals) {
-        if (m.mecanographicNumber !== '56359') {
-          syncDocument('meals', m.id, m);
-        }
-      }
+      // Garantir persistência em lote no Firestore antes de concluir
+      await Promise.all([
+        syncDocument('imports', importRecord.id, importRecord),
+        deleteDocumentsBatch('tasks', removedTaskIds.filter(id => !newTaskIds.has(id))),
+        deleteDocumentsBatch('meals', removedMealIds.filter(id => !newMealIds.has(id))),
+        syncDocumentsBatch('tasks', preparedTasks),
+        syncDocumentsBatch('meals', validMeals),
+      ]);
 
       return { success: true };
     } catch (err: any) {

@@ -22,6 +22,7 @@ import type {
   AuditLog,
   PdeRequest,
   InAppNotification,
+  ImportRecord,
 } from '../src/types/index.ts';
 
 export interface DailyStatistic {
@@ -179,90 +180,103 @@ export function sanitizeForFirestore<T>(data: T): T {
   return data;
 }
 
+const FIRESTORE_BATCH_LIMIT = 400;
+
 /**
- * Sincronização inicial de toda a base de dados
+ * Gravação em lotes (chunks de até 400 documentos) no Firestore.
  */
-export async function syncAllToFirestore(data: {
-  collaborators: Collaborator[];
-  articles: Article[];
-  tasks: DailyTask[];
-  meals: MealSchedule[];
-  stocks: StockRecord[];
-  audits: AuditLog[];
-  pdes?: PdeRequest[];
-  notifications?: InAppNotification[];
-}): Promise<boolean> {
+export async function syncDocumentsBatch(
+  collectionName: string,
+  items: Array<{ id: string } & Record<string, any>>
+): Promise<boolean> {
+  if (!items || items.length === 0) return true;
   const firestore = initFirebase();
   if (!firestore) return false;
 
   try {
-    // 1. Sincronizar Colaboradores em batch
-    const colabBatch = writeBatch(firestore);
-    for (const c of data.collaborators) {
-      colabBatch.set(doc(firestore, 'collaborators', c.id), sanitizeForFirestore(c));
-    }
-    await colabBatch.commit();
-
-    // 2. Sincronizar Artigos do catálogo (em lotes de até 400 documentos)
-    const chunkSize = 400;
-    for (let i = 0; i < data.articles.length; i += chunkSize) {
-      const chunk = data.articles.slice(i, i + chunkSize);
-      const articleBatch = writeBatch(firestore);
-      for (const a of chunk) {
-        articleBatch.set(doc(firestore, 'articles', a.id), sanitizeForFirestore(a));
+    for (let i = 0; i < items.length; i += FIRESTORE_BATCH_LIMIT) {
+      const chunk = items.slice(i, i + FIRESTORE_BATCH_LIMIT);
+      const batch = writeBatch(firestore);
+      for (const item of chunk) {
+        if (!item?.id) continue;
+        batch.set(doc(firestore, collectionName, item.id), sanitizeForFirestore(item));
       }
-      await articleBatch.commit();
+      await batch.commit();
     }
-
-    // 3. Sincronizar Tarefas
-    for (let i = 0; i < data.tasks.length; i += chunkSize) {
-      const chunk = data.tasks.slice(i, i + chunkSize);
-      const taskBatch = writeBatch(firestore);
-      for (const t of chunk) {
-        taskBatch.set(doc(firestore, 'tasks', t.id), sanitizeForFirestore(t));
-      }
-      await taskBatch.commit();
-    }
-
-    // 4. Sincronizar Horários de Refeição
-    for (let i = 0; i < data.meals.length; i += chunkSize) {
-      const chunk = data.meals.slice(i, i + chunkSize);
-      const mealBatch = writeBatch(firestore);
-      for (const m of chunk) {
-        mealBatch.set(doc(firestore, 'meals', m.id), sanitizeForFirestore(m));
-      }
-      await mealBatch.commit();
-    }
-
-    // 5. Sincronizar Stocks
-    if (data.stocks.length > 0) {
-      const stockBatch = writeBatch(firestore);
-      for (const s of data.stocks) {
-        stockBatch.set(doc(firestore, 'stocks', s.id), sanitizeForFirestore(s));
-      }
-      await stockBatch.commit();
-    }
-
-    // 6. Sincronizar PDEs
-    if (data.pdes && data.pdes.length > 0) {
-      const pdeBatch = writeBatch(firestore);
-      for (const p of data.pdes) {
-        pdeBatch.set(doc(firestore, 'pdes', p.id), sanitizeForFirestore(p));
-      }
-      await pdeBatch.commit();
-    }
-
-    // 7. Sincronizar Notificações
-    if (data.notifications && data.notifications.length > 0) {
-      const notifBatch = writeBatch(firestore);
-      for (const n of data.notifications) {
-        notifBatch.set(doc(firestore, 'notifications', n.id), sanitizeForFirestore(n));
-      }
-      await notifBatch.commit();
-    }
-
-    console.log('[Firebase] Sincronização inicial concluída com sucesso!');
     return true;
+  } catch (err) {
+    console.warn(`[Firebase] Erro ao gravar lote em ${collectionName}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Remoção em lotes (chunks de até 400 documentos) no Firestore.
+ */
+export async function deleteDocumentsBatch(collectionName: string, ids: string[]): Promise<boolean> {
+  const uniqueIds = Array.from(new Set((ids || []).filter(Boolean)));
+  if (uniqueIds.length === 0) return true;
+  const firestore = initFirebase();
+  if (!firestore) return false;
+
+  try {
+    for (let i = 0; i < uniqueIds.length; i += FIRESTORE_BATCH_LIMIT) {
+      const chunk = uniqueIds.slice(i, i + FIRESTORE_BATCH_LIMIT);
+      const batch = writeBatch(firestore);
+      for (const id of chunk) {
+        batch.delete(doc(firestore, collectionName, id));
+      }
+      await batch.commit();
+    }
+    return true;
+  } catch (err) {
+    console.warn(`[Firebase] Erro ao apagar lote em ${collectionName}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Sincronização completa da base de dados local para o Firestore
+ */
+export async function syncAllToFirestore(
+  data: {
+    collaborators: Collaborator[];
+    articles: Article[];
+    tasks: DailyTask[];
+    meals: MealSchedule[];
+    stocks: StockRecord[];
+    audits: AuditLog[];
+    pdes?: PdeRequest[];
+    notifications?: InAppNotification[];
+    imports?: ImportRecord[];
+  },
+  options?: { includeArticles?: boolean }
+): Promise<boolean> {
+  const firestore = initFirebase();
+  if (!firestore) return false;
+
+  try {
+    const ops: Promise<boolean>[] = [
+      syncDocumentsBatch('collaborators', data.collaborators),
+      syncDocumentsBatch('tasks', data.tasks),
+      syncDocumentsBatch('meals', data.meals),
+      syncDocumentsBatch('stocks', data.stocks),
+      syncDocumentsBatch('pdes', data.pdes || []),
+      syncDocumentsBatch('notifications', data.notifications || []),
+      syncDocumentsBatch('imports', data.imports || []),
+      syncDocumentsBatch('audits', (data.audits || []).slice(0, 500)),
+    ];
+
+    if (options?.includeArticles !== false) {
+      ops.push(syncDocumentsBatch('articles', data.articles));
+    }
+
+    const results = await Promise.all(ops);
+    const allOk = results.every(Boolean);
+    if (allOk) {
+      console.log('[Firebase] Sincronização completa com o Firestore concluída com sucesso!');
+    }
+    return allOk;
   } catch (error) {
     console.error('[Firebase] Erro ao sincronizar dados com o Firestore:', error);
     return false;
@@ -272,27 +286,31 @@ export async function syncAllToFirestore(data: {
 /**
  * Gravação pontual de documento no Firestore (com sanitização automática de undefined)
  */
-export async function syncDocument(collectionName: string, id: string, docData: any) {
+export async function syncDocument(collectionName: string, id: string, docData: any): Promise<boolean> {
   const firestore = initFirebase();
-  if (!firestore) return;
+  if (!firestore) return false;
   try {
     const cleanData = sanitizeForFirestore(docData);
     await setDoc(doc(firestore, collectionName, id), cleanData);
+    return true;
   } catch (err) {
     console.warn(`[Firebase] Erro ao salvar ${collectionName}/${id}:`, err);
+    return false;
   }
 }
 
 /**
  * Remoção pontual de documento no Firestore
  */
-export async function deleteDocument(collectionName: string, id: string) {
+export async function deleteDocument(collectionName: string, id: string): Promise<boolean> {
   const firestore = initFirebase();
-  if (!firestore) return;
+  if (!firestore) return false;
   try {
     await deleteDoc(doc(firestore, collectionName, id));
+    return true;
   } catch (err) {
     console.warn(`[Firebase] Erro ao apagar ${collectionName}/${id}:`, err);
+    return false;
   }
 }
 
@@ -347,23 +365,39 @@ export async function computeAndSaveDailyStat(
  */
 export async function loadAllFromFirestore(): Promise<{
   collaborators?: Collaborator[];
+  articles?: Article[];
   tasks?: DailyTask[];
   meals?: MealSchedule[];
   stocks?: StockRecord[];
   pdes?: PdeRequest[];
   notifications?: InAppNotification[];
+  imports?: ImportRecord[];
+  audits?: AuditLog[];
 } | null> {
   const firestore = initFirebase();
   if (!firestore) return null;
 
   try {
-    const [tasksSnap, mealsSnap, stocksSnap, pdesSnap, notifsSnap, colabsSnap] = await Promise.all([
+    const [
+      tasksSnap,
+      mealsSnap,
+      stocksSnap,
+      pdesSnap,
+      notifsSnap,
+      colabsSnap,
+      articlesSnap,
+      importsSnap,
+      auditsSnap,
+    ] = await Promise.all([
       getDocs(collection(firestore, 'tasks')),
       getDocs(collection(firestore, 'meals')),
       getDocs(collection(firestore, 'stocks')),
       getDocs(collection(firestore, 'pdes')),
       getDocs(collection(firestore, 'notifications')),
       getDocs(collection(firestore, 'collaborators')),
+      getDocs(collection(firestore, 'articles')),
+      getDocs(collection(firestore, 'imports')),
+      getDocs(collection(firestore, 'audits')),
     ]);
 
     const tasks: DailyTask[] = [];
@@ -402,8 +436,26 @@ export async function loadAllFromFirestore(): Promise<{
       if (data && data.id) collaborators.push(data);
     });
 
+    const articles: Article[] = [];
+    articlesSnap.forEach(d => {
+      const data = d.data() as Article;
+      if (data && data.id) articles.push(data);
+    });
+
+    const imports: ImportRecord[] = [];
+    importsSnap.forEach(d => {
+      const data = d.data() as ImportRecord;
+      if (data && data.id) imports.push(data);
+    });
+
+    const audits: AuditLog[] = [];
+    auditsSnap.forEach(d => {
+      const data = d.data() as AuditLog;
+      if (data && data.id) audits.push(data);
+    });
+
     console.log(
-      `[Firebase] Carregados do Firestore: ${tasks.length} tarefas, ${meals.length} refeições, ${stocks.length} stocks, ${pdes.length} PDEs, ${notifications.length} notificações, ${collaborators.length} colaboradores.`
+      `[Firebase] Carregados do Firestore: ${tasks.length} tarefas, ${meals.length} refeições, ${stocks.length} stocks, ${pdes.length} PDEs, ${imports.length} importações, ${collaborators.length} colaboradores, ${articles.length} artigos, ${audits.length} auditorias.`
     );
 
     return {
@@ -413,6 +465,9 @@ export async function loadAllFromFirestore(): Promise<{
       pdes,
       notifications,
       collaborators,
+      articles,
+      imports,
+      audits,
     };
   } catch (error) {
     console.warn('[Firebase] Erro ao carregar dados do Firestore (usando armazenamento local):', error);

@@ -781,10 +781,10 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
 
               <div className="bg-surface-container border border-line rounded-xl px-3 py-2 text-[11px] text-on-surface-muted flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  <strong className="text-on-surface">Pontuação Anual ({effectiveDate.slice(0, 4)}):</strong> Taxa Tarefas (0–10 pts) + Stocks Excesso (+1 adição, +4 tratado, -1 não considerado) + PDE (+3 adição, +8 resolvido, -2 não considerado)
+                  <strong className="text-on-surface">IPA ({effectiveDate.slice(0, 4)}):</strong> Taxa Tarefas (0–10 pts) + Stocks Excesso (+1 adição, +4 tratado, -1 não considerado) + PDE (+3 adição, +8 resolvido, -2 não considerado)
                 </span>
                 <span className="text-on-surface-subtle font-medium">
-                  Administradores e Gestores de Stocks & PDE não estão sujeitos a pontuação · Reinicia anualmente
+                  Administradores e Gestores de Stocks & PDE não estão sujeitos a IPA · Reinicia anualmente
                 </span>
               </div>
 
@@ -804,102 +804,97 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
                           <th className="py-2.5 px-3.5 text-center">Concluídas</th>
                           <th className="py-2.5 px-3.5 text-center">Não Feitas</th>
                           <th className="py-2.5 px-3.5 text-center">Por Assinalar</th>
-                          <th className="py-2.5 px-3.5">Cumprimento</th>
-                          <th className="py-2.5 px-3.5 text-right">Taxa Tarefas</th>
-                          <th className="py-2.5 px-3.5 text-right">Stocks Excesso</th>
-                          <th className="py-2.5 px-3.5 text-right">PDE</th>
-                          <th className="py-2.5 px-3.5 text-right">Pontuação Anual ({effectiveDate.slice(0, 4)})</th>
+                          <th className="py-2.5 px-3.5">
+                            Taxa de Cumprimento ({reportPeriod === 'MES' ? 'Mês' : reportPeriod === 'ANO' ? 'Ano' : 'Dia'})
+                          </th>
+                          <th className="py-2.5 px-3.5">Taxa de Cumprimento Tarefas (Semana)</th>
+                          <th className="py-2.5 px-3.5 text-right">IPA ({effectiveDate.slice(0, 4)})</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-line-subtle">
-                        {report.collaboratorTasks.map(c => (
-                          <tr key={c.mecanographicNumber} className="hover:bg-surface-container/60 transition-colors">
-                            <td className="py-2.5 px-3.5 font-mono font-bold text-on-surface-muted whitespace-nowrap">
-                              {c.mecanographicNumber}
-                            </td>
-                            <td className="py-2.5 px-3.5 font-semibold text-on-surface">
-                              {c.name}
-                            </td>
-                            <td className="py-2.5 px-3.5 text-center font-mono tabular-nums font-bold text-on-surface">
-                              {c.totalTasks}
-                            </td>
-                            <td className="py-2.5 px-3.5 text-center font-mono tabular-nums font-bold text-success-ink">
-                              <span className="inline-flex items-center gap-1 bg-success-tint text-success-ink px-2 py-0.5 rounded-full border border-success-border">
-                                <CheckCircle2 className="w-3 h-3 text-success" />
-                                {c.completedTasks}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3.5 text-center font-mono tabular-nums font-bold text-danger-ink">
-                              <span className="inline-flex items-center gap-1 bg-danger-tint text-danger-ink px-2 py-0.5 rounded-full border border-danger-border">
-                                <XCircle className="w-3 h-3 text-danger" />
-                                {c.notDoneTasks}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3.5 text-center font-mono tabular-nums text-amber-ink">
-                              <span className="inline-flex items-center gap-1 bg-amber-tint text-amber-ink px-2 py-0.5 rounded-full border border-amber-border">
-                                <Clock className="w-3 h-3 text-amber-ink" />
-                                {c.pendingTasks}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3.5 whitespace-nowrap">
-                              <div className="flex items-center gap-2">
-                                <div className="w-20 bg-surface-container rounded-full h-2 overflow-hidden border border-line-subtle">
-                                  <div
-                                    className={`h-full transition-all rounded-full ${
-                                      c.completionRate >= 80
-                                        ? 'bg-success'
-                                        : c.completionRate >= 50
-                                        ? 'bg-amber-brand'
-                                        : 'bg-danger'
-                                    }`}
-                                    style={{ width: `${c.completionRate}%` }}
-                                  />
-                                </div>
-                                <span className="font-mono tabular-nums font-bold text-xs text-on-surface">
-                                  {c.completionRate}%
+                        {report.collaboratorTasks.map(c => {
+                          const weeklyRate = c.weeklyCompletionRate ?? 0;
+                          return (
+                            <tr key={c.mecanographicNumber} className="hover:bg-surface-container/60 transition-colors">
+                              <td className="py-2.5 px-3.5 font-mono font-bold text-on-surface-muted whitespace-nowrap">
+                                {c.mecanographicNumber}
+                              </td>
+                              <td className="py-2.5 px-3.5 font-semibold text-on-surface">
+                                {c.name}
+                              </td>
+                              <td className="py-2.5 px-3.5 text-center font-mono tabular-nums font-bold text-on-surface">
+                                {c.totalTasks}
+                              </td>
+                              <td className="py-2.5 px-3.5 text-center font-mono tabular-nums font-bold text-success-ink">
+                                <span className="inline-flex items-center gap-1 bg-success-tint text-success-ink px-2 py-0.5 rounded-full border border-success-border">
+                                  <CheckCircle2 className="w-3 h-3 text-success" />
+                                  {c.completedTasks}
                                 </span>
-                              </div>
-                            </td>
-                            {c.annualScore?.eligible ? (
-                              <>
-                                <td className="py-2.5 px-3.5 text-right font-mono tabular-nums text-on-surface whitespace-nowrap">
-                                  <div>{c.annualScore.taskRatePoints} / 10</div>
-                                  <div className="text-[10px] text-on-surface-subtle">{c.annualScore.taskCompletionRate}% anual</div>
-                                </td>
-                                <td className="py-2.5 px-3.5 text-right font-mono tabular-nums text-on-surface whitespace-nowrap">
-                                  <div>
-                                    {c.annualScore.excessNetPoints >= 0 ? '+' : ''}
-                                    {c.annualScore.excessNetPoints} pts
+                              </td>
+                              <td className="py-2.5 px-3.5 text-center font-mono tabular-nums font-bold text-danger-ink">
+                                <span className="inline-flex items-center gap-1 bg-danger-tint text-danger-ink px-2 py-0.5 rounded-full border border-danger-border">
+                                  <XCircle className="w-3 h-3 text-danger" />
+                                  {c.notDoneTasks}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3.5 text-center font-mono tabular-nums text-amber-ink">
+                                <span className="inline-flex items-center gap-1 bg-amber-tint text-amber-ink px-2 py-0.5 rounded-full border border-amber-border">
+                                  <Clock className="w-3 h-3 text-amber-ink" />
+                                  {c.pendingTasks}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3.5 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 bg-surface-container rounded-full h-2 overflow-hidden border border-line-subtle">
+                                    <div
+                                      className={`h-full transition-all rounded-full ${
+                                        c.completionRate >= 80
+                                          ? 'bg-success'
+                                          : c.completionRate >= 50
+                                          ? 'bg-amber-brand'
+                                          : 'bg-danger'
+                                      }`}
+                                      style={{ width: `${c.completionRate}%` }}
+                                    />
                                   </div>
-                                  <div className="text-[10px] text-on-surface-subtle">
-                                    +{c.annualScore.excessAddedCount} / +{c.annualScore.excessTreatedCount} / -{c.annualScore.excessNotConsideredCount}
+                                  <span className="font-mono tabular-nums font-bold text-xs text-on-surface">
+                                    {c.completionRate}%
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3.5 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 bg-surface-container rounded-full h-2 overflow-hidden border border-line-subtle">
+                                    <div
+                                      className={`h-full transition-all rounded-full ${
+                                        weeklyRate >= 80
+                                          ? 'bg-success'
+                                          : weeklyRate >= 50
+                                          ? 'bg-amber-brand'
+                                          : 'bg-danger'
+                                      }`}
+                                      style={{ width: `${weeklyRate}%` }}
+                                    />
                                   </div>
-                                </td>
-                                <td className="py-2.5 px-3.5 text-right font-mono tabular-nums text-on-surface whitespace-nowrap">
-                                  <div>
-                                    {c.annualScore.pdeNetPoints >= 0 ? '+' : ''}
-                                    {c.annualScore.pdeNetPoints} pts
-                                  </div>
-                                  <div className="text-[10px] text-on-surface-subtle">
-                                    +{c.annualScore.pdeAddedCount} / +{c.annualScore.pdeResolvedCount} / -{c.annualScore.pdeNotConsideredCount}
-                                  </div>
-                                </td>
+                                  <span className="font-mono tabular-nums font-bold text-xs text-on-surface">
+                                    {weeklyRate}%
+                                  </span>
+                                </div>
+                              </td>
+                              {c.annualScore?.eligible ? (
                                 <td className="py-2.5 px-3.5 text-right font-mono tabular-nums font-black text-amber-ink whitespace-nowrap">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-amber-tint border border-amber-border">
                                     {c.annualScore.totalPoints} pts
                                   </span>
                                 </td>
-                              </>
-                            ) : (
-                              <td
-                                colSpan={4}
-                                className="py-2.5 px-3.5 text-right text-[11px] font-semibold text-on-surface-subtle italic whitespace-nowrap"
-                              >
-                                Isento (Admin / Gestor Stocks & PDE)
-                              </td>
-                            )}
-                          </tr>
-                        ))}
+                              ) : (
+                                <td className="py-2.5 px-3.5 text-right text-[11px] font-semibold text-on-surface-subtle italic whitespace-nowrap">
+                                  Isento
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

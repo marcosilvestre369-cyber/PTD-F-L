@@ -444,7 +444,7 @@ export function exportDailyReportPdf(report: DailyReportSummary) {
     doc.setFontSize(10.5);
     doc.setTextColor(15, 23, 42);
     doc.text(
-      `5. Desempenho e Conclusão de Tarefas por Colaborador (${report.collaboratorTasks?.length || 0} colaboradores)`,
+      `5. Conclusão de Tarefas por Colaborador (${report.collaboratorTasks?.length || 0} colaboradores)`,
       margin,
       currentY
     );
@@ -458,6 +458,7 @@ export function exportDailyReportPdf(report: DailyReportSummary) {
       currentY += 8;
     } else {
       const reportYear = report.reportDate.slice(0, 4);
+      const periodHeaderSuffix = period === 'MES' ? 'Mês' : period === 'ANO' ? 'Ano' : 'Dia';
       const colabRows = report.collaboratorTasks.map(c => {
         const eligible = c.annualScore?.eligible;
         return [
@@ -468,58 +469,48 @@ export function exportDailyReportPdf(report: DailyReportSummary) {
           `${c.notDoneTasks}`,
           `${c.pendingTasks}`,
           `${c.completionRate}%`,
-          eligible ? `${c.annualScore?.taskRatePoints ?? 0}/10` : 'Isento',
-          eligible
-            ? `${(c.annualScore?.excessNetPoints ?? 0) >= 0 ? '+' : ''}${c.annualScore?.excessNetPoints ?? 0}`
-            : 'Isento',
-          eligible
-            ? `${(c.annualScore?.pdeNetPoints ?? 0) >= 0 ? '+' : ''}${c.annualScore?.pdeNetPoints ?? 0}`
-            : 'Isento',
+          `${c.weeklyCompletionRate ?? 0}%`,
           eligible ? `${c.annualScore?.totalPoints ?? 0} pts` : 'Isento',
         ];
       });
 
-      // 16+36+13+13+13+14+17+15+15+13+17 = 182mm (largura exata A4)
+      // 16+37+16+17+17+18+22+23+20 = 186mm (largura útil exata A4 com margens 12mm)
       autoTable(doc, {
         startY: currentY,
         head: [[
           'Nº Mec.',
           'Colaborador',
-          'Total',
-          'Feitas',
-          'N/Feitas',
-          'Por Ass.',
-          'Cumpr.',
-          'Taxa (0-10)',
-          'Stocks',
-          'PDE',
-          `Pont. ${reportYear}`,
+          'Total Tarefas',
+          'Concluídas',
+          'Não Feitas',
+          'Por Assinalar',
+          `Taxa Cumpr. (${periodHeaderSuffix})`,
+          'Taxa Tarefas (Sem.)',
+          `IPA (${reportYear})`,
         ]],
         body: colabRows,
         theme: 'grid',
         styles: {
           fontSize: 7,
-          cellPadding: 1.4,
+          cellPadding: 1.5,
           textColor: [51, 65, 85],
           lineColor: [226, 232, 240],
         },
         headStyles: {
-          fillColor: [30, 41, 59],
-          textColor: [255, 255, 255],
+          fillColor: [38, 38, 38],
+          textColor: [249, 249, 248],
           fontStyle: 'bold',
         },
         columnStyles: {
           0: { cellWidth: 16 },
-          1: { cellWidth: 36 },
-          2: { cellWidth: 13, halign: 'center' },
-          3: { cellWidth: 13, halign: 'center' },
-          4: { cellWidth: 13, halign: 'center' },
-          5: { cellWidth: 14, halign: 'center' },
-          6: { cellWidth: 17, halign: 'center' },
-          7: { cellWidth: 15, halign: 'right' },
-          8: { cellWidth: 15, halign: 'right' },
-          9: { cellWidth: 13, halign: 'right' },
-          10: { cellWidth: 17, halign: 'right', fontStyle: 'bold' },
+          1: { cellWidth: 37 },
+          2: { cellWidth: 16, halign: 'center' },
+          3: { cellWidth: 17, halign: 'center' },
+          4: { cellWidth: 17, halign: 'center' },
+          5: { cellWidth: 18, halign: 'center' },
+          6: { cellWidth: 22, halign: 'center' },
+          7: { cellWidth: 23, halign: 'center' },
+          8: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
         },
         margin: { left: margin, right: margin },
       });

@@ -136,15 +136,22 @@ export const StatisticsAndHistoryView: React.FC = () => {
               <span className="text-base font-bold tracking-tight text-hero-fg">
                 Base de Dados na Nuvem (Firebase Firestore)
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-brand/20 text-amber-brand border border-amber-brand/40">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-brand animate-pulse"></span>
-                Ativa & Sincronizada
-              </span>
+              {historyData?.databaseInfo?.status === 'CONNECTED' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-brand/20 text-amber-brand border border-amber-brand/40">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-brand animate-pulse"></span>
+                  Ativa & Sincronizada
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-danger-tint text-danger-ink border border-danger-border">
+                  <span className="w-1.5 h-1.5 rounded-full bg-danger"></span>
+                  Apenas Local (Firestore Inativo)
+                </span>
+              )}
             </div>
             <div className="text-xs text-hero-muted flex flex-wrap items-center gap-x-3 gap-y-1 font-mono">
               <span>Projeto: <strong className="text-hero-fg">{historyData?.databaseInfo?.projectId || 'Firestore'}</strong></span>
               <span>·</span>
-              <span>Coleções: <strong className="text-hero-fg">collaborators, tasks, meals, articles, stocks, statistics</strong></span>
+              <span>Coleções: <strong className="text-hero-fg">collaborators, tasks, meals, imports, articles, stocks, pdes, notifications, audits, statistics</strong></span>
             </div>
           </div>
         </div>
