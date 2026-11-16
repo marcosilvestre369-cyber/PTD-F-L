@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { storage, getLisbonDateTimeParts } from './server/storage.ts';
+import { getFirebaseConfigInfo } from './server/firebaseSync.ts';
 import { parseScheduleFile } from './server/pdfParser.ts';
 import { parseScheduleWorkbook, generateScheduleTemplateBuffer, type ImportWorkbookScope } from './server/excelParser.ts';
 import type { Collaborator, Role } from './src/types/index.ts';
@@ -103,9 +104,16 @@ function requireRole(allowedRoles: Role[]) {
 
 // 0. Health Check (Hostinger / Cloud monitoring)
 app.get('/api/health', (_req: Request, res: Response) => {
+  const fb = getFirebaseConfigInfo();
   return res.json({
     status: 'ok',
     env: process.env.NODE_ENV || 'development',
+    database: {
+      provider: 'Firebase Firestore',
+      connected: fb.connected,
+      projectId: fb.projectId,
+      databaseId: fb.databaseId,
+    },
     timestamp: new Date().toISOString(),
   });
 });

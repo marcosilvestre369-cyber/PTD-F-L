@@ -57,6 +57,11 @@ interface ResolvedFirebaseConfig {
   firestoreDatabaseId?: string;
 }
 
+function cleanEnvValue(value: string | undefined): string {
+  if (!value) return '';
+  return value.trim().replace(/^['"]+|['"]+$/g, '').trim();
+}
+
 function resolveFirebaseConfig(): ResolvedFirebaseConfig | null {
   let fileConfig: Partial<ResolvedFirebaseConfig> = {};
   const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
@@ -69,21 +74,21 @@ function resolveFirebaseConfig(): ResolvedFirebaseConfig | null {
     }
   }
 
-  const apiKey = process.env.FIREBASE_API_KEY || fileConfig.apiKey || '';
-  const projectId = process.env.FIREBASE_PROJECT_ID || fileConfig.projectId || '';
-  const appId = process.env.FIREBASE_APP_ID || fileConfig.appId || '';
+  const apiKey = cleanEnvValue(process.env.FIREBASE_API_KEY) || fileConfig.apiKey || '';
+  const projectId = cleanEnvValue(process.env.FIREBASE_PROJECT_ID) || fileConfig.projectId || '';
+  const appId = cleanEnvValue(process.env.FIREBASE_APP_ID) || fileConfig.appId || '';
   const authDomain =
-    process.env.FIREBASE_AUTH_DOMAIN ||
+    cleanEnvValue(process.env.FIREBASE_AUTH_DOMAIN) ||
     fileConfig.authDomain ||
     (projectId ? `${projectId}.firebaseapp.com` : '');
   const storageBucket =
-    process.env.FIREBASE_STORAGE_BUCKET ||
+    cleanEnvValue(process.env.FIREBASE_STORAGE_BUCKET) ||
     fileConfig.storageBucket ||
     (projectId ? `${projectId}.firebasestorage.app` : '');
   const messagingSenderId =
-    process.env.FIREBASE_MESSAGING_SENDER_ID || fileConfig.messagingSenderId || '';
+    cleanEnvValue(process.env.FIREBASE_MESSAGING_SENDER_ID) || fileConfig.messagingSenderId || '';
   const firestoreDatabaseId =
-    process.env.FIREBASE_FIRESTORE_DATABASE_ID || fileConfig.firestoreDatabaseId || '(default)';
+    cleanEnvValue(process.env.FIREBASE_FIRESTORE_DATABASE_ID) || fileConfig.firestoreDatabaseId || '(default)';
 
   if (!apiKey || !projectId || !appId) {
     return null;

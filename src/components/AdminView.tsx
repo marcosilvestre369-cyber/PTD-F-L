@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Collaborator, Article, ImportRecord, AuditLog, Role } from '../types/index.ts';
 import { api } from '../services/api.ts';
 import { formatDatePt, formatDateTimePt } from '../utils/date.ts';
+import { StatisticsAndHistoryView } from './StatisticsAndHistoryView.tsx';
 import {
   Users,
   BookOpen,
   FileSpreadsheet,
   ScrollText,
+  Database,
   UserPlus,
   Plus,
   Trash2,
@@ -39,7 +41,13 @@ interface ConfirmModalState {
 }
 
 export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
-  const [subTab, setSubTab] = useState<'colaboradores' | 'catalogo' | 'importacao' | 'auditoria'>('colaboradores');
+  const [subTab, setSubTab] = useState<'colaboradores' | 'catalogo' | 'importacao' | 'auditoria' | 'basedados'>('colaboradores');
+  const [dbInfo, setDbInfo] = useState<{
+    provider: string;
+    projectId: string;
+    databaseId: string;
+    status: string;
+  } | null>(null);
 
   // Modal de Confirmação Seguro
   const [confirmModal, setConfirmModal] = useState<ConfirmModalState | null>(null);
@@ -93,7 +101,19 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
 
   useEffect(() => {
     loadAll();
+    loadDbStatus();
   }, [subTab]);
+
+  const loadDbStatus = async () => {
+    try {
+      const history = await api.getHistory();
+      if (history?.databaseInfo) {
+        setDbInfo(history.databaseInfo);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadAll = async () => {
     try {
@@ -459,9 +479,41 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
             </span>
           </div>
           <p className="text-xs text-on-surface-muted mt-0.5">
-            Gestão de colaboradores, catálogo da secção, importação de tarefas (ptd / pts) e auditoria.
+            Gestão de colaboradores, catálogo da secção, importação de tarefas (ptd / pts), auditoria e base de dados.
           </p>
         </div>
+
+        {/* Indicador rápido do estado da Base de Dados */}
+        <button
+          type="button"
+          onClick={() => setSubTab('basedados')}
+          title="Abrir separador Base de Dados e sincronização na nuvem"
+          className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer self-start sm:self-center ${
+            dbInfo?.status === 'CONNECTED'
+              ? 'bg-success-tint text-success-ink border-success-border hover:opacity-90'
+              : dbInfo
+              ? 'bg-danger-tint text-danger-ink border-danger-border hover:opacity-90'
+              : 'bg-surface-container text-on-surface-muted border-line'
+          }`}
+        >
+          <Database className="w-3.5 h-3.5 shrink-0" />
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${
+              dbInfo?.status === 'CONNECTED'
+                ? 'bg-success animate-pulse'
+                : dbInfo
+                ? 'bg-danger'
+                : 'bg-on-surface-subtle'
+            }`}
+          />
+          <span>
+            {dbInfo?.status === 'CONNECTED'
+              ? 'Base de Dados: Ativa & Sincronizada'
+              : dbInfo
+              ? 'Base de Dados: Apenas Local'
+              : 'A verificar Base de Dados...'}
+          </span>
+        </button>
       </div>
 
       {/* Sub-navegação */}
@@ -504,6 +556,16 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
         >
           <ScrollText className="w-3.5 h-3.5" />
           <span>Auditoria</span>
+        </button>
+
+        <button
+          onClick={() => setSubTab('basedados')}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+            subTab === 'basedados' ? 'bg-primary text-on-primary shadow-xs' : 'text-on-surface-muted hover:text-on-surface'
+          }`}
+        >
+          <Database className="w-3.5 h-3.5" />
+          <span>Base de Dados</span>
         </button>
       </div>
 
@@ -1386,6 +1448,11 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
             </table>
           </div>
         </div>
+      )}
+
+      {/* ================= 5. SUB-ABA: BASE DE DADOS ================= */}
+      {subTab === 'basedados' && (
+        <StatisticsAndHistoryView />
       )}
 
       {/* ================= MODAL EDITAR COLABORADOR ================= */}
