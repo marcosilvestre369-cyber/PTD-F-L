@@ -185,6 +185,9 @@ class StorageManager {
           yasmin.updatedAt = new Date().toISOString();
         }
 
+        // Corrigir Nº Mecanográfico de Henrique Sousa (56813 -> 508913)
+        this.migrateCollaboratorNumber('56813', '508913', 'HENRIQUE SOUSA');
+
         // Garantir que todos os colaboradores ativos entram diretamente pelo número
         this.store.collaborators.forEach(c => {
           if (c.status === 'PENDENTE_ATIVACAO') {
@@ -300,6 +303,13 @@ class StorageManager {
               }
               this.store.notifications = Array.from(notifMap.values());
               changed = true;
+            }
+
+            if (this.migrateCollaboratorNumber('56813', '508913', 'HENRIQUE SOUSA')) {
+              changed = true;
+            }
+            if (remote.collaborators?.some(c => c.id === 'colab-56813')) {
+              deleteDocument('collaborators', 'colab-56813');
             }
 
             if (changed) {
@@ -566,10 +576,88 @@ class StorageManager {
     return this.store.collaborators.find(c => c.id === id);
   }
 
+  private migrateCollaboratorNumber(oldNumber: string, newNumber: string, expectedName?: string): boolean {
+    let changed = false;
+    const oldId = `colab-${oldNumber}`;
+    const target = this.store.collaborators.find(
+      c => c.mecanographicNumber === oldNumber || c.id === oldId
+    );
+    const alreadyNew = this.store.collaborators.find(c => c.mecanographicNumber === newNumber);
+
+    if (target) {
+      if (alreadyNew && alreadyNew.id !== target.id) {
+        this.store.collaborators = this.store.collaborators.filter(c => c.id !== target.id);
+      } else {
+        target.mecanographicNumber = newNumber;
+        if (target.id === oldId) {
+          target.id = `colab-${newNumber}`;
+        }
+        if (expectedName && target.name !== expectedName) {
+          target.name = expectedName;
+        }
+        target.updatedAt = new Date().toISOString();
+      }
+      deleteDocument('collaborators', oldId);
+      changed = true;
+    }
+
+    const newColabId = alreadyNew?.id || target?.id || `colab-${newNumber}`;
+
+    this.store.tasks.forEach(t => {
+      if (t.mecanographicNumber === oldNumber || t.collaboratorId === oldId) {
+        t.mecanographicNumber = newNumber;
+        t.collaboratorId = newColabId;
+        if (expectedName) t.collaboratorName = expectedName;
+        changed = true;
+      }
+    });
+    this.store.meals.forEach(m => {
+      if (m.mecanographicNumber === oldNumber || m.collaboratorId === oldId) {
+        m.mecanographicNumber = newNumber;
+        m.collaboratorId = newColabId;
+        if (expectedName) m.collaboratorName = expectedName;
+        changed = true;
+      }
+    });
+    this.store.stocks.forEach(s => {
+      if (s.authorNumber === oldNumber) {
+        s.authorNumber = newNumber;
+        if (expectedName) s.authorName = expectedName;
+        changed = true;
+      }
+    });
+    this.store.pdes.forEach(p => {
+      if (p.submittedByNumber === oldNumber) {
+        p.submittedByNumber = newNumber;
+        if (expectedName) p.submittedByName = expectedName;
+        changed = true;
+      }
+      if (p.resolvedByNumber === oldNumber) {
+        p.resolvedByNumber = newNumber;
+        if (expectedName) p.resolvedByName = expectedName;
+        changed = true;
+      }
+    });
+    this.store.notifications.forEach(n => {
+      if (n.recipientNumber === oldNumber) {
+        n.recipientNumber = newNumber;
+        if (expectedName) n.recipientName = expectedName;
+        changed = true;
+      }
+      if (n.senderNumber === oldNumber) {
+        n.senderNumber = newNumber;
+        if (expectedName) n.senderName = expectedName;
+        changed = true;
+      }
+    });
+
+    return changed;
+  }
+
   public addCollaborator(
     mecanographicNumber: string,
     name: string,
-    role: 'ADMIN' | 'COLABORADOR',
+    role: Role,
     author: Collaborator
   ): { success: boolean; error?: string; collaborator?: Collaborator } {
     const numClean = mecanographicNumber.trim();
@@ -598,7 +686,164 @@ class StorageManager {
     this.store.collaborators.push(newColab);
     this.logAudit(author.mecanographicNumber, author.name, 'ADICIONAR_COLABORADOR', 'Colaborador', `Adicionado ${newColab.name} (${newColab.mecanographicNumber}) como ${newColab.role}`);
     this.save();
+    syncDocument('collaborators', newColab.id, newColab);
     return { success: true, collaborator: newColab };
+  }
+
+  public updateCollaborator(
+    id: string,
+    updates: {
+      mecanographicNumber?: string;
+      name?: string;
+      role?: Role;
+      status?: 'ATIVO' | 'DESATIVADO';
+    },
+    author: Collaborator
+  ): { success: boolean; error?: string; collaborator?: Collaborator } {
+    const target = this.store.collaborators.find(c => c.id === id);
+    if (!target) {
+      return { success: false, error: 'Colaborador não encontrado.' };
+    }
+
+    const nextNumber = updates.mecanographicNumber !== undefined
+      ? updates.mecanographicNumber.trim()
+      : target.mecanographicNumber;
+    const nextName = updates.name !== undefined
+      ? updates.name.trim().toUpperCase()
+      : target.name;
+    const nextRole: Role = updates.role !== undefined ? updates.role : target.role;
+    const nextStatus = updates.status !== undefined ? updates.status : (target.status === 'DESATIVADO' ? 'DESATIVADO' : 'ATIVO');
+
+    if (!nextNumber) {
+      return { success: false, error: 'Número mecanográfico obrigatório.' };
+    }
+    if (!nextName) {
+      return { success: false, error: 'Nome do colaborador obrigatório.' };
+    }
+    if (nextRole !== 'ADMIN' && nextRole !== 'COLABORADOR' && nextRole !== 'GESTOR_STOCKS_PDE') {
+      return { success: false, error: 'Perfil inválido.' };
+    }
+    if (nextStatus !== 'ATIVO' && nextStatus !== 'DESATIVADO') {
+      return { success: false, error: 'Estado inválido.' };
+    }
+
+    const duplicate = this.store.collaborators.find(
+      c => c.id !== target.id && c.mecanographicNumber.trim() === nextNumber
+    );
+    if (duplicate) {
+      return {
+        success: false,
+        error: `O número mecanográfico ${nextNumber} já está atribuído a ${duplicate.name}.`,
+      };
+    }
+
+    // Impedir remoção/desativação do último administrador ativo
+    if (
+      target.role === 'ADMIN' &&
+      target.status === 'ATIVO' &&
+      (nextRole !== 'ADMIN' || nextStatus !== 'ATIVO')
+    ) {
+      const otherActiveAdmins = this.store.collaborators.filter(
+        c => c.role === 'ADMIN' && c.status === 'ATIVO' && c.id !== target.id
+      );
+      if (otherActiveAdmins.length === 0) {
+        return {
+          success: false,
+          error: 'Não é permitido remover privilégios ou desativar o último administrador ativo do sistema.',
+        };
+      }
+    }
+
+    const oldNumber = target.mecanographicNumber;
+    const oldName = target.name;
+    const oldRole = target.role;
+    const oldStatus = target.status;
+
+    target.mecanographicNumber = nextNumber;
+    target.name = nextName;
+    target.role = nextRole;
+    target.status = nextStatus;
+    target.updatedAt = new Date().toISOString();
+
+    // Propagar alterações de número ou nome pelos registos associados
+    if (oldNumber !== nextNumber || oldName !== nextName) {
+      this.store.tasks.forEach(t => {
+        if (t.collaboratorId === target.id || t.mecanographicNumber === oldNumber) {
+          t.mecanographicNumber = nextNumber;
+          t.collaboratorName = nextName;
+          syncDocument('tasks', t.id, t);
+        }
+      });
+
+      this.store.meals.forEach(m => {
+        if (m.collaboratorId === target.id || m.mecanographicNumber === oldNumber) {
+          m.mecanographicNumber = nextNumber;
+          m.collaboratorName = nextName;
+          syncDocument('meals', m.id, m);
+        }
+      });
+
+      this.store.stocks.forEach(s => {
+        let modified = false;
+        if (s.authorNumber === oldNumber) {
+          s.authorNumber = nextNumber;
+          s.authorName = nextName;
+          modified = true;
+        }
+        if (s.assignedTo === oldName) {
+          s.assignedTo = nextName;
+          modified = true;
+        }
+        if (modified) syncDocument('stocks', s.id, s);
+      });
+
+      this.store.pdes.forEach(p => {
+        let modified = false;
+        if (p.submittedByNumber === oldNumber) {
+          p.submittedByNumber = nextNumber;
+          p.submittedByName = nextName;
+          modified = true;
+        }
+        if (p.resolvedByNumber === oldNumber) {
+          p.resolvedByNumber = nextNumber;
+          p.resolvedByName = nextName;
+          modified = true;
+        }
+        if (modified) syncDocument('pdes', p.id, p);
+      });
+
+      this.store.notifications.forEach(n => {
+        let modified = false;
+        if (n.recipientNumber === oldNumber) {
+          n.recipientNumber = nextNumber;
+          n.recipientName = nextName;
+          modified = true;
+        }
+        if (n.senderNumber === oldNumber) {
+          n.senderNumber = nextNumber;
+          n.senderName = nextName;
+          modified = true;
+        }
+        if (modified) syncDocument('notifications', n.id, n);
+      });
+    }
+
+    const changes: string[] = [];
+    if (oldNumber !== nextNumber) changes.push(`Nº ${oldNumber} -> ${nextNumber}`);
+    if (oldName !== nextName) changes.push(`Nome "${oldName}" -> "${nextName}"`);
+    if (oldRole !== nextRole) changes.push(`Perfil ${oldRole} -> ${nextRole}`);
+    if (oldStatus !== nextStatus) changes.push(`Estado ${oldStatus} -> ${nextStatus}`);
+
+    this.logAudit(
+      author.mecanographicNumber,
+      author.name,
+      'EDITAR_COLABORADOR',
+      'Colaborador',
+      `Editado ${nextName} (${nextNumber}): ${changes.length > 0 ? changes.join(', ') : 'sem alterações de campos'}`
+    );
+    this.save();
+    syncDocument('collaborators', target.id, target);
+    return { success: true, collaborator: target };
   }
 
   public deactivateCollaborator(
@@ -623,6 +868,7 @@ class StorageManager {
     target.updatedAt = new Date().toISOString();
     this.logAudit(author.mecanographicNumber, author.name, 'DESATIVAR_COLABORADOR', 'Colaborador', `Desativado ${target.name} (${target.mecanographicNumber})`);
     this.save();
+    syncDocument('collaborators', target.id, target);
     return { success: true };
   }
 
@@ -647,6 +893,7 @@ class StorageManager {
     this.store.collaborators = this.store.collaborators.filter(c => c.id !== id);
     this.logAudit(author.mecanographicNumber, author.name, 'APAGAR_COLABORADOR', 'Colaborador', `Apagado colaborador ${target.name} (${target.mecanographicNumber})`);
     this.save();
+    deleteDocument('collaborators', id);
     return { success: true };
   }
 
@@ -675,6 +922,7 @@ class StorageManager {
     target.updatedAt = new Date().toISOString();
     this.logAudit(author.mecanographicNumber, author.name, 'ALTERAR_PERFIL', 'Colaborador', `Perfil de ${target.name} (${target.mecanographicNumber}) alterado para ${newRole}`);
     this.save();
+    syncDocument('collaborators', target.id, target);
     return { success: true };
   }
 

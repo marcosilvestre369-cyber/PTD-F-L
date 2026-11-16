@@ -50,8 +50,8 @@ export const INITIAL_COLLABORATORS: Collaborator[] = [
     updatedAt: '2026-11-07T00:00:00.000Z',
   },
   {
-    id: 'colab-56813',
-    mecanographicNumber: '56813',
+    id: 'colab-508913',
+    mecanographicNumber: '508913',
     name: 'HENRIQUE SOUSA',
     role: 'COLABORADOR',
     status: 'ATIVO',

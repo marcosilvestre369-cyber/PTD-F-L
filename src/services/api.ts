@@ -117,6 +117,21 @@ export const api = {
     });
   },
 
+  async updateCollaborator(
+    id: string,
+    payload: {
+      mecanographicNumber: string;
+      name: string;
+      role: Role;
+      status: 'ATIVO' | 'DESATIVADO';
+    }
+  ) {
+    return this.request<Collaborator>(`/api/collaborators/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async deactivateCollaborator(id: string) {
     return this.request<{ success: boolean; message: string }>(`/api/collaborators/${id}/deactivate`, {
       method: 'PATCH',

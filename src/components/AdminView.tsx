@@ -20,6 +20,8 @@ import {
   Upload,
   Package,
   History,
+  Pencil,
+  X,
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -51,6 +53,15 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
   const [colabLoading, setColabLoading] = useState(false);
   const [colabError, setColabError] = useState<string | null>(null);
   const [colabSuccess, setColabSuccess] = useState<string | null>(null);
+  const [editingColab, setEditingColab] = useState<{
+    id: string;
+    mecanographicNumber: string;
+    name: string;
+    role: Role;
+    status: 'ATIVO' | 'DESATIVADO';
+  } | null>(null);
+  const [editColabLoading, setEditColabLoading] = useState(false);
+  const [editColabError, setEditColabError] = useState<string | null>(null);
 
   // Catálogo
   const [articles, setArticles] = useState<Article[]>([]);
@@ -194,6 +205,43 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
         }
       },
     });
+  };
+
+  const handleOpenEditColab = (c: Collaborator) => {
+    setEditColabError(null);
+    setEditingColab({
+      id: c.id,
+      mecanographicNumber: c.mecanographicNumber,
+      name: c.name,
+      role: c.role,
+      status: c.status === 'DESATIVADO' ? 'DESATIVADO' : 'ATIVO',
+    });
+  };
+
+  const handleSaveEditColab = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingColab) return;
+    setEditColabError(null);
+    setColabError(null);
+    setColabSuccess(null);
+    setEditColabLoading(true);
+
+    try {
+      const updatedColab = await api.updateCollaborator(editingColab.id, {
+        mecanographicNumber: editingColab.mecanographicNumber.trim(),
+        name: editingColab.name.trim(),
+        role: editingColab.role,
+        status: editingColab.status,
+      });
+      setColabSuccess(`Colaborador ${updatedColab.name} (Nº ${updatedColab.mecanographicNumber}) atualizado com sucesso.`);
+      setEditingColab(null);
+      const updated = await api.getCollaborators();
+      setCollaborators(updated);
+    } catch (err: any) {
+      setEditColabError(err.message || 'Erro ao atualizar colaborador.');
+    } finally {
+      setEditColabLoading(false);
+    }
   };
 
   // --- Handlers de Catálogo ---
@@ -618,6 +666,15 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
                               <option value="ADMIN">Administrador</option>
                             </select>
                           )}
+
+                          <button
+                            onClick={() => handleOpenEditColab(c)}
+                            title="Editar dados do colaborador"
+                            className="px-2.5 py-1 text-[11px] font-bold text-amber-ink bg-amber-tint hover:bg-amber-border/30 border border-amber-border rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>Editar</span>
+                          </button>
 
                           {!isDeactivated && (
                             <button
@@ -1327,6 +1384,122 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL EDITAR COLABORADOR ================= */}
+      {editingColab && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-surface-card rounded-2xl max-w-md w-full shadow-2xl border border-line overflow-hidden">
+            <div className="bg-hero-bg px-5 py-4 text-hero-fg flex items-center justify-between border-b-2 border-amber-brand">
+              <div className="flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-amber-brand" />
+                <h3 className="text-sm font-bold tracking-tight">Editar Colaborador</h3>
+              </div>
+              <button
+                type="button"
+                disabled={editColabLoading}
+                onClick={() => setEditingColab(null)}
+                className="p-1 text-hero-muted hover:text-hero-fg rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditColab} className="p-5 space-y-4 text-xs">
+              {editColabError && (
+                <div className="p-3 bg-danger-tint border border-danger-border rounded-xl flex items-center gap-2 text-danger-ink font-medium">
+                  <AlertCircle className="w-4 h-4 text-danger shrink-0" />
+                  <span>{editColabError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-on-surface-muted mb-1">
+                  Nº Mecanográfico *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingColab.mecanographicNumber}
+                  onChange={e =>
+                    setEditingColab(prev => (prev ? { ...prev, mecanographicNumber: e.target.value } : null))
+                  }
+                  className="w-full px-3 py-2 bg-surface-container border border-line rounded-xl text-on-surface focus:bg-surface-card focus:outline-none focus:ring-2 focus:ring-amber-brand font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-on-surface-muted mb-1">
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingColab.name}
+                  onChange={e =>
+                    setEditingColab(prev => (prev ? { ...prev, name: e.target.value } : null))
+                  }
+                  className="w-full px-3 py-2 bg-surface-container border border-line rounded-xl text-on-surface focus:bg-surface-card focus:outline-none focus:ring-2 focus:ring-amber-brand uppercase font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-on-surface-muted mb-1">
+                    Perfil de Acesso
+                  </label>
+                  <select
+                    value={editingColab.role}
+                    onChange={e =>
+                      setEditingColab(prev => (prev ? { ...prev, role: e.target.value as Role } : null))
+                    }
+                    className="w-full px-3 py-2 bg-surface-container border border-line rounded-xl text-on-surface focus:bg-surface-card focus:outline-none focus:ring-2 focus:ring-amber-brand font-semibold"
+                  >
+                    <option value="COLABORADOR">Colaborador</option>
+                    <option value="GESTOR_STOCKS_PDE">Gestor Stocks & PDE</option>
+                    <option value="ADMIN">Administrador</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-on-surface-muted mb-1">
+                    Estado
+                  </label>
+                  <select
+                    value={editingColab.status}
+                    onChange={e =>
+                      setEditingColab(prev =>
+                        prev ? { ...prev, status: e.target.value as 'ATIVO' | 'DESATIVADO' } : null
+                      )
+                    }
+                    className="w-full px-3 py-2 bg-surface-container border border-line rounded-xl text-on-surface focus:bg-surface-card focus:outline-none focus:ring-2 focus:ring-amber-brand font-semibold"
+                  >
+                    <option value="ATIVO">ATIVO</option>
+                    <option value="DESATIVADO">DESATIVADO</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-line-subtle">
+                <button
+                  type="button"
+                  disabled={editColabLoading}
+                  onClick={() => setEditingColab(null)}
+                  className="px-4 py-2 text-xs font-semibold text-on-surface-muted bg-surface-container hover:bg-surface-hover rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={editColabLoading || !editingColab.mecanographicNumber.trim() || !editingColab.name.trim()}
+                  className="px-4 py-2 text-xs font-bold bg-primary hover:bg-primary-hover disabled:opacity-50 text-on-primary rounded-xl shadow-xs transition-all cursor-pointer"
+                >
+                  {editColabLoading ? 'A guardar...' : 'Guardar Alterações'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

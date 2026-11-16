@@ -200,6 +200,19 @@ app.post('/api/collaborators', authenticateToken, requireRole(['ADMIN']), (req: 
   return res.status(201).json(result.collaborator);
 });
 
+app.patch('/api/collaborators/:id', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+  const { mecanographicNumber, name, role, status } = req.body;
+  const result = storage.updateCollaborator(
+    req.params.id,
+    { mecanographicNumber, name, role, status },
+    req.user!
+  );
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+  return res.json(result.collaborator);
+});
+
 app.patch('/api/collaborators/:id/deactivate', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
   const result = storage.deactivateCollaborator(req.params.id, req.user!);
   if (!result.success) {
@@ -830,34 +843,63 @@ async function startServer() {
     app.get('*', (_req, res) => {
       res.sendFile(distIndexHtml);
     });
-  } else {
-    console.log('Modo Desenvolvimento: a iniciar middleware Vite');
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Servidor a correr na porta ${PORT} [http://0.0.0.0:${PORT}]`);
+    });
+    return;
+  }
+
+  console.log('Modo Desenvolvimento: a iniciar middleware Vite');
+
+  let viteInstance: Awaited<ReturnType<(typeof import('vite'))['createServer']>> | null = null;
+  const viteReady = (async () => {
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: {
         middlewareMode: true,
         hmr: false,
+        ws: false,
       },
       appType: 'spa',
     });
-    app.use(vite.middlewares);
+    viteInstance = vite;
+    return vite;
+  })();
 
-    app.get('*', async (req, res, next) => {
-      const url = req.originalUrl;
-      try {
-        let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
-        template = await vite.transformIndexHtml(url, template);
-        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
-      } catch (e) {
-        vite.ssrFixStacktrace(e as Error);
-        next(e);
-      }
-    });
-  }
+  app.use(async (req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      return next();
+    }
+    try {
+      const vite = viteInstance || (await viteReady);
+      return vite.middlewares(req, res, next);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  app.get('*', async (req, res, next) => {
+    const url = req.originalUrl;
+    try {
+      const vite = viteInstance || (await viteReady);
+      let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+      template = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+    } catch (e) {
+      viteInstance?.ssrFixStacktrace(e as Error);
+      next(e);
+    }
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor a correr na porta ${PORT} [http://0.0.0.0:${PORT}]`);
   });
+
+  await viteReady;
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('Erro fatal ao iniciar o servidor:', err);
+  process.exit(1);
+});
