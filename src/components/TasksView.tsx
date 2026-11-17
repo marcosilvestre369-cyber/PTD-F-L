@@ -694,7 +694,10 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
 
           {/* IPA (apenas para COLABORADOR; Admins e Gestores estão isentos) */}
           {performance.annualScore?.eligible && (
-            <div className="col-span-4 min-w-0 bg-surface-container text-on-surface rounded-2xl border border-amber-border/70 p-3.5 sm:p-5 shadow-2xs flex flex-col justify-between gap-2.5 sm:gap-3">
+            <div
+              title={`IPA ${performance.annualScore.year}: Tarefas (${performance.annualScore.tasksNetPoints} pts) · Stocks (${performance.annualScore.stockNetPoints} pts) · PDE (${performance.annualScore.pdeNetPoints} pts)`}
+              className="col-span-4 min-w-0 bg-surface-container text-on-surface rounded-2xl border border-amber-border/70 p-3.5 sm:p-5 shadow-2xs flex flex-col justify-between gap-2.5 sm:gap-3"
+            >
               <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-amber-ink leading-tight">
                 IPA
               </span>

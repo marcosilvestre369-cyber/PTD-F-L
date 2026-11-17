@@ -781,7 +781,7 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
 
               <div className="bg-surface-container border border-line rounded-xl px-3 py-2 text-[11px] text-on-surface-muted flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  <strong className="text-on-surface">IPA ({effectiveDate.slice(0, 4)}):</strong> Taxa Tarefas (0–10 pts) + Stocks Excesso (+1 adição, +4 tratado, -1 não considerado) + PDE (+3 adição, +8 resolvido, -2 não considerado)
+                  <strong className="text-on-surface">IPA ({effectiveDate.slice(0, 4)}):</strong> Tarefas (+5 concluída, -3 não feita, -2 por assinalar) · Dia 100% (+8) · Semana &gt;90% (+5 após domingo) · Stocks Excesso/Rotura (+1 registo, +6 tratado) · PDE (+4 registo, +9 resolvido)
                 </span>
                 <span className="text-on-surface-subtle font-medium">
                   Administradores e Gestores de Stocks & PDE não estão sujeitos a IPA · Reinicia anualmente

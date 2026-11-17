@@ -2410,90 +2410,154 @@ class StorageManager {
         eligible: false,
         taskTotalCount: 0,
         taskCompletedCount: 0,
+        taskNotDoneCount: 0,
+        taskPendingCount: 0,
         taskCompletionRate: 0,
-        taskRatePoints: 0,
-        excessAddedCount: 0,
-        excessAddedPoints: 0,
-        excessTreatedCount: 0,
-        excessTreatedPoints: 0,
-        excessNotConsideredCount: 0,
-        excessNotConsideredPoints: 0,
-        excessNetPoints: 0,
+        taskCompletedPoints: 0,
+        taskNotDonePoints: 0,
+        taskPendingPoints: 0,
+        daily100Count: 0,
+        daily100Points: 0,
+        weeklyOver90Count: 0,
+        weeklyOver90Points: 0,
+        tasksNetPoints: 0,
+        stockAddedCount: 0,
+        stockAddedPoints: 0,
+        stockTreatedCount: 0,
+        stockTreatedPoints: 0,
+        stockNetPoints: 0,
         pdeAddedCount: 0,
         pdeAddedPoints: 0,
         pdeResolvedCount: 0,
         pdeResolvedPoints: 0,
-        pdeNotConsideredCount: 0,
-        pdeNotConsideredPoints: 0,
         pdeNetPoints: 0,
         totalPoints: 0,
       };
     }
 
     const yearPrefix = `${year}-`;
+    const numericYear = parseInt(year, 10) || undefined;
+    const todayLisbonStr = getLisbonDateTimeParts().dateStr;
 
-    // 1. Taxa de cumprimento anual de tarefas (0 a 10 pontos)
+    // 1. Tarefas do ano (reset anual automático no final de cada ano por prefixo YYYY-)
     const yearTasks = (this.store.tasks || []).filter(
       t => t.mecanographicNumber === mecanographicNumber && t.date.startsWith(yearPrefix)
     );
     const taskTotalCount = yearTasks.length;
     const taskCompletedCount = yearTasks.filter(t => t.status === 'FEITA').length;
+    const taskNotDoneCount = yearTasks.filter(t => t.status === 'NAO_FEITA').length;
+    const taskPendingCount = yearTasks.filter(t => t.status === 'POR_ASSINALAR').length;
     const taskCompletionRate = taskTotalCount > 0 ? Math.round((taskCompletedCount / taskTotalCount) * 100) : 0;
-    const taskRatePoints = taskTotalCount > 0 ? Math.round(((taskCompletedCount / taskTotalCount) * 10) * 10) / 10 : 0;
 
-    // 2. Processos de excessos de stock no ano (+1 adição, +4 tratado, -1 não considerado)
-    const yearExcess = (this.store.stocks || []).filter(s => {
-      if (s.type !== 'EXCESSO') return false;
+    // Regra 2: +5 pontos por cada tarefa concluída
+    const taskCompletedPoints = taskCompletedCount * 5;
+    // Regra 3: -3 pontos por cada tarefa não feita
+    const taskNotDonePoints = taskNotDoneCount * -3;
+    // Regra 4: -2 pontos por cada tarefa por assinalar
+    const taskPendingPoints = taskPendingCount * -2;
+
+    // Regra 5: Se a taxa de cumprimento (dia) for de 100%, ganha +8 pontos por dia
+    const tasksByDay = new Map<string, DailyTask[]>();
+    for (const t of yearTasks) {
+      const list = tasksByDay.get(t.date) || [];
+      list.push(t);
+      tasksByDay.set(t.date, list);
+    }
+    let daily100Count = 0;
+    for (const dayTasks of tasksByDay.values()) {
+      if (dayTasks.length > 0 && dayTasks.every(t => t.status === 'FEITA')) {
+        daily100Count += 1;
+      }
+    }
+    const daily100Points = daily100Count * 8;
+
+    // Regra 6: Se a taxa de cumprimento tarefas (semana) for > 90%, ganha +5 pontos (só atribuído após o último dia da semana)
+    const tasksByWeek = new Map<string, { weekEnd: string; tasks: DailyTask[] }>();
+    for (const t of yearTasks) {
+      const wb = getWeekBoundsFromDate(t.date, numericYear);
+      const existing = tasksByWeek.get(wb.weekStart);
+      if (existing) {
+        existing.tasks.push(t);
+      } else {
+        tasksByWeek.set(wb.weekStart, { weekEnd: wb.weekEnd, tasks: [t] });
+      }
+    }
+    let weeklyOver90Count = 0;
+    for (const { weekEnd, tasks: weekTasks } of tasksByWeek.values()) {
+      // Só atribuído após o último dia da semana (Domingo) ter terminado
+      if (todayLisbonStr <= weekEnd) continue;
+      const total = weekTasks.length;
+      if (total === 0) continue;
+      const completed = weekTasks.filter(t => t.status === 'FEITA').length;
+      const rate = Math.round((completed / total) * 100);
+      if (rate > 90) {
+        weeklyOver90Count += 1;
+      }
+    }
+    const weeklyOver90Points = weeklyOver90Count * 5;
+
+    const tasksNetPoints =
+      taskCompletedPoints +
+      taskNotDonePoints +
+      taskPendingPoints +
+      daily100Points +
+      weeklyOver90Points;
+
+    // 2. Regra 7: Excessos de stock ou roturas/revisões no ano (+1 ponto registo, +6 pontos tratado)
+    const yearStocks = (this.store.stocks || []).filter(s => {
+      if (s.type !== 'EXCESSO' && s.type !== 'ROTURA') return false;
       if (s.authorNumber !== mecanographicNumber) return false;
       const dateRef = s.registrationDate || s.createdAt || '';
       return dateRef.startsWith(yearPrefix);
     });
-    const excessAddedCount = yearExcess.length;
-    const excessAddedPoints = excessAddedCount * 1;
-    const excessTreatedCount = yearExcess.filter(
+    const stockAddedCount = yearStocks.length;
+    const stockAddedPoints = stockAddedCount * 1;
+    const stockTreatedCount = yearStocks.filter(
       s => s.status === 'TRATADO' || (s.status as string) === 'RESOLVIDO'
     ).length;
-    const excessTreatedPoints = excessTreatedCount * 4;
-    const excessNotConsideredCount = yearExcess.filter(s => s.status === 'NAO_CONSIDERADO').length;
-    const excessNotConsideredPoints = excessNotConsideredCount * -1;
-    const excessNetPoints = excessAddedPoints + excessTreatedPoints + excessNotConsideredPoints;
+    const stockTreatedPoints = stockTreatedCount * 6;
+    const stockNetPoints = stockAddedPoints + stockTreatedPoints;
 
-    // 3. Processos de PDE no ano (+3 adição, +8 resolvido, -2 não considerado)
+    // 3. Regra 8: Pedidos de PDE no ano (+4 pontos registo, +9 pontos resolvido)
     const yearPdes = (this.store.pdes || []).filter(p => {
       if (p.submittedByNumber !== mecanographicNumber) return false;
       const dateRef = p.arrivalDate || p.submittedAt || '';
       return dateRef.startsWith(yearPrefix);
     });
     const pdeAddedCount = yearPdes.length;
-    const pdeAddedPoints = pdeAddedCount * 3;
+    const pdeAddedPoints = pdeAddedCount * 4;
     const pdeResolvedCount = yearPdes.filter(p => p.status === 'RESOLVIDO').length;
-    const pdeResolvedPoints = pdeResolvedCount * 8;
-    const pdeNotConsideredCount = yearPdes.filter(p => p.status === 'NAO_CONSIDERADO').length;
-    const pdeNotConsideredPoints = pdeNotConsideredCount * -2;
-    const pdeNetPoints = pdeAddedPoints + pdeResolvedPoints + pdeNotConsideredPoints;
+    const pdeResolvedPoints = pdeResolvedCount * 9;
+    const pdeNetPoints = pdeAddedPoints + pdeResolvedPoints;
 
-    const totalPoints = Math.round((taskRatePoints + excessNetPoints + pdeNetPoints) * 10) / 10;
+    // Regra 9: Soma de todos os pontos ganhos e retirados
+    const totalPoints = tasksNetPoints + stockNetPoints + pdeNetPoints;
 
     return {
       year,
       eligible: true,
       taskTotalCount,
       taskCompletedCount,
+      taskNotDoneCount,
+      taskPendingCount,
       taskCompletionRate,
-      taskRatePoints,
-      excessAddedCount,
-      excessAddedPoints,
-      excessTreatedCount,
-      excessTreatedPoints,
-      excessNotConsideredCount,
-      excessNotConsideredPoints,
-      excessNetPoints,
+      taskCompletedPoints,
+      taskNotDonePoints,
+      taskPendingPoints,
+      daily100Count,
+      daily100Points,
+      weeklyOver90Count,
+      weeklyOver90Points,
+      tasksNetPoints,
+      stockAddedCount,
+      stockAddedPoints,
+      stockTreatedCount,
+      stockTreatedPoints,
+      stockNetPoints,
       pdeAddedCount,
       pdeAddedPoints,
       pdeResolvedCount,
       pdeResolvedPoints,
-      pdeNotConsideredCount,
-      pdeNotConsideredPoints,
       pdeNetPoints,
       totalPoints,
     };
