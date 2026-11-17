@@ -55,6 +55,7 @@ export interface MealSchedule {
   startTime?: string;
   endTime?: string;
   source: 'PTD' | 'PTS' | 'MANUAL';
+  importId?: string;
   hasConflict?: boolean;
   conflictDetails?: string;
 }
@@ -149,6 +150,7 @@ export interface ImportRecord {
   fileHash: string;
   version: number;
   status: ImportStatus;
+  supersededByVersion?: number;
   uploadedAt: string;
   uploadedBy: string;
   publishedAt?: string;

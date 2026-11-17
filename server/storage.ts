@@ -235,6 +235,7 @@ class StorageManager {
           );
         }
 
+        this.normalizeImportPrecedence();
         this.hadLocalStore = true;
         this.save();
       } else {
@@ -393,9 +394,8 @@ class StorageManager {
           for (const ri of remote.imports) {
             importMap.set(ri.id, ri);
           }
-          this.store.imports = Array.from(importMap.values()).sort(
-            (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
-          );
+          this.store.imports = Array.from(importMap.values());
+          this.normalizeImportPrecedence();
           changed = true;
         }
 
@@ -1842,8 +1842,38 @@ class StorageManager {
     };
   }
 
-  // --- Importações de PDF ---
+  // --- Importações de Excel / PDF ---
+  private sortImportsNewestFirst(): void {
+    this.store.imports.sort((a, b) => {
+      const timeB = new Date(b.publishedAt || b.uploadedAt || 0).getTime();
+      const timeA = new Date(a.publishedAt || a.uploadedAt || 0).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      return (b.version || 0) - (a.version || 0);
+    });
+  }
+
+  private normalizeImportPrecedence(): ImportRecord[] {
+    this.sortImportsNewestFirst();
+    const activeByScope = new Map<string, ImportRecord>();
+    const superseded: ImportRecord[] = [];
+
+    for (const imp of this.store.imports) {
+      if (imp.status !== 'PUBLICADO') continue;
+      const scopeKey = `${imp.sourceType}::${(imp.week || '').trim().toLowerCase()}`;
+      const newest = activeByScope.get(scopeKey);
+      if (!newest) {
+        activeByScope.set(scopeKey, imp);
+      } else {
+        imp.status = 'ANULADO';
+        imp.supersededByVersion = newest.version;
+        superseded.push(imp);
+      }
+    }
+    return superseded;
+  }
+
   public getImports(): ImportRecord[] {
+    this.sortImportsNewestFirst();
     return this.store.imports;
   }
 
@@ -1872,6 +1902,7 @@ class StorageManager {
     for (const nt of newTasks) {
       // Requisito: Administradores não estão presentes nas tarefas operacionais
       if (nt.mecanographicNumber === '56359') continue;
+      nt.importId = importRecord.id;
 
       const key = `${nt.mecanographicNumber}_${nt.date}_${nt.type}_${nt.description.trim().toLowerCase()}`;
       const prev = existingTasksMap.get(key);
@@ -1894,7 +1925,9 @@ class StorageManager {
       }
       return true;
     });
-    const validMeals = newMeals.filter(m => m.mecanographicNumber !== '56359');
+    const validMeals = newMeals
+      .filter(m => m.mecanographicNumber !== '56359')
+      .map(m => ({ ...m, importId: importRecord.id }));
     this.store.meals.push(...validMeals);
 
     importRecord.status = 'PUBLICADO';
@@ -1907,6 +1940,7 @@ class StorageManager {
     } else {
       this.store.imports.unshift(importRecord);
     }
+    const supersededImports = this.normalizeImportPrecedence();
 
     this.logAudit(
       author.mecanographicNumber,
@@ -1915,12 +1949,12 @@ class StorageManager {
       'Importação',
       `Publicado ${importRecord.sourceType} [${importRecord.week}] com ${addedTasks.length} tarefas e ${validMeals.length} refeições`
     );
-    this.save();
+    this.saveDirect();
 
     const newTaskIds = new Set(addedTasks.map(t => t.id));
     const newMealIds = new Set(validMeals.map(m => m.id));
     await Promise.all([
-      syncDocument('imports', importRecord.id, importRecord),
+      syncDocumentsBatch('imports', [importRecord, ...supersededImports]),
       deleteDocumentsBatch('tasks', removedTaskIds.filter(id => !newTaskIds.has(id))),
       deleteDocumentsBatch('meals', removedMealIds.filter(id => !newMealIds.has(id))),
       syncDocumentsBatch('tasks', addedTasks),
@@ -1935,10 +1969,64 @@ class StorageManager {
     if (!target) return { success: false, error: 'Importação não encontrada.' };
 
     target.status = 'ANULADO';
+
+    // Recolher datas associadas a esta versão
+    const targetDates = new Set<string>();
+    (target.rows || []).forEach((r: any) => {
+      if (r?.date) targetDates.add(r.date);
+    });
+    this.store.tasks.forEach(t => {
+      if (t.importId === importId && t.date) targetDates.add(t.date);
+    });
+    this.store.meals.forEach(m => {
+      if (m.importId === importId && m.date) targetDates.add(m.date);
+    });
+
+    // Verificar quais datas ainda estão cobertas por outra versão PUBLICADA da mesma folha
+    const activeDatesSameSource = new Set<string>();
+    for (const imp of this.store.imports) {
+      if (imp.id === importId || imp.status !== 'PUBLICADO' || imp.sourceType !== target.sourceType) continue;
+      (imp.rows || []).forEach((r: any) => {
+        if (r?.date) activeDatesSameSource.add(r.date);
+      });
+    }
+    for (const t of this.store.tasks) {
+      if (t.importId && t.importId !== importId && t.source === target.sourceType && t.date) {
+        const ownerImp = this.store.imports.find(i => i.id === t.importId);
+        if (ownerImp?.status === 'PUBLICADO') activeDatesSameSource.add(t.date);
+      }
+    }
+
     const removedTaskIds: string[] = [];
     this.store.tasks = this.store.tasks.filter(t => {
+      if (t.type === 'ADICIONAL') return true;
       if (t.importId === importId) {
         removedTaskIds.push(t.id);
+        return false;
+      }
+      if (
+        t.source === target.sourceType &&
+        targetDates.has(t.date) &&
+        !activeDatesSameSource.has(t.date)
+      ) {
+        removedTaskIds.push(t.id);
+        return false;
+      }
+      return true;
+    });
+
+    const removedMealIds: string[] = [];
+    this.store.meals = this.store.meals.filter(m => {
+      if (m.importId === importId) {
+        removedMealIds.push(m.id);
+        return false;
+      }
+      if (
+        m.source === target.sourceType &&
+        targetDates.has(m.date) &&
+        !activeDatesSameSource.has(m.date)
+      ) {
+        removedMealIds.push(m.id);
         return false;
       }
       return true;
@@ -1949,14 +2037,38 @@ class StorageManager {
       author.name,
       'ANULAR_IMPORTACAO',
       'Importação',
-      `Anulada importação ${target.fileName} (${target.sourceType} - ${target.week})`
+      `Anulada importação ${target.fileName} (${target.sourceType} v${target.version} - ${target.week})`
     );
-    this.save();
+    this.saveDirect();
 
     await Promise.all([
       syncDocument('imports', target.id, target),
       deleteDocumentsBatch('tasks', removedTaskIds),
+      deleteDocumentsBatch('meals', removedMealIds),
     ]);
+
+    return { success: true };
+  }
+
+  public async deleteImportRecord(importId: string, author: Collaborator): Promise<{ success: boolean; error?: string }> {
+    const target = this.store.imports.find(i => i.id === importId);
+    if (!target) return { success: false, error: 'Registo de importação não encontrado.' };
+
+    if (target.status === 'PUBLICADO') {
+      const revertRes = await this.revertImport(importId, author);
+      if (!revertRes.success) return revertRes;
+    }
+
+    this.store.imports = this.store.imports.filter(i => i.id !== importId);
+    this.logAudit(
+      author.mecanographicNumber,
+      author.name,
+      'ELIMINAR_IMPORTACAO',
+      'Importação',
+      `Registo removido do histórico: ${target.fileName} (${target.sourceType} v${target.version} - ${target.week})`
+    );
+    this.saveDirect();
+    await deleteDocument('imports', importId);
 
     return { success: true };
   }
@@ -2245,13 +2357,55 @@ class StorageManager {
       importRecord.status = 'PUBLICADO';
       importRecord.publishedAt = new Date().toISOString();
       importRecord.publishedBy = user.name;
-      this.store.imports.unshift(importRecord);
 
-      // Datas afetadas por esta folha (incluindo datas de linhas FOLGA/FÉRIAS)
-      const affectedDates = new Set<string>();
-      tasks.forEach(t => t.date && affectedDates.add(t.date));
-      meals.forEach(m => m.date && affectedDates.add(m.date));
-      (importRecord.rows || []).forEach((r: any) => r.date && affectedDates.add(r.date));
+      // Datas afetadas por esta folha (incluindo linhas FOLGA/FÉRIAS e expansão para a semana completa Seg–Dom)
+      const seedDates = new Set<string>();
+      tasks.forEach(t => t.date && seedDates.add(t.date));
+      meals.forEach(m => m.date && seedDates.add(m.date));
+      (importRecord.rows || []).forEach((r: any) => r.date && seedDates.add(r.date));
+
+      const affectedDates = new Set<string>(seedDates);
+      for (const dateStr of seedDates) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+        const wb = getWeekBoundsFromDate(dateStr);
+        const [my, mm, md] = wb.weekStart.split('-').map(Number);
+        const monUtc = new Date(Date.UTC(my, mm - 1, md));
+        for (let i = 0; i < 7; i++) {
+          affectedDates.add(new Date(monUtc.getTime() + i * 86400000).toISOString().split('T')[0]);
+        }
+      }
+
+      // A versão mais atual prevalece: anular automaticamente versões anteriores PUBLICADAS da mesma folha e semana/datas
+      const supersededImports: ImportRecord[] = [];
+      const supersededIds = new Set<string>();
+      const normalizedWeek = (importRecord.week || '').trim().toLowerCase();
+
+      for (const prevImp of this.store.imports) {
+        if (prevImp.id === importRecord.id) continue;
+        if (prevImp.sourceType !== importRecord.sourceType || prevImp.status !== 'PUBLICADO') continue;
+
+        const sameWeek = normalizedWeek && (prevImp.week || '').trim().toLowerCase() === normalizedWeek;
+        const sharesDate = (prevImp.rows || []).some((r: any) => r?.date && affectedDates.has(r.date));
+
+        if (sameWeek || sharesDate) {
+          prevImp.status = 'ANULADO';
+          prevImp.supersededByVersion = importRecord.version;
+          supersededImports.push(prevImp);
+          supersededIds.add(prevImp.id);
+          (prevImp.rows || []).forEach((r: any) => {
+            if (r?.date) affectedDates.add(r.date);
+          });
+        }
+      }
+
+      this.store.imports.unshift(importRecord);
+      const extraSuperseded = this.normalizeImportPrecedence();
+      for (const es of extraSuperseded) {
+        if (!supersededIds.has(es.id)) {
+          supersededImports.push(es);
+          supersededIds.add(es.id);
+        }
+      }
 
       // Preservar respostas existentes por chave lógica
       const existingTasksMap = new Map<string, DailyTask>();
@@ -2260,10 +2414,14 @@ class StorageManager {
         existingTasksMap.set(key, t);
       }
 
-      // Substituir apenas tarefas da mesma fonte (PTD ou PTS) nas datas importadas, preservando ADICIONAL e outras semanas
+      // Substituir tarefas da mesma fonte nas datas importadas ou de versões substituídas, preservando ADICIONAL e outras semanas
       const removedTaskIds: string[] = [];
       this.store.tasks = this.store.tasks.filter(t => {
         if (t.type === 'ADICIONAL') return true;
+        if (t.importId && supersededIds.has(t.importId)) {
+          removedTaskIds.push(t.id);
+          return false;
+        }
         if (t.source === importRecord.sourceType && affectedDates.has(t.date)) {
           removedTaskIds.push(t.id);
           return false;
@@ -2288,11 +2446,17 @@ class StorageManager {
       }
       this.store.tasks = [...preparedTasks, ...this.store.tasks];
 
-      // Substituir horários de refeição da mesma fonte nas datas importadas
+      // Substituir horários de refeição da mesma fonte nas datas importadas ou de versões substituídas
       const removedMealIds: string[] = [];
-      const validMeals = meals.filter(m => m.mecanographicNumber !== '56359');
+      const validMeals = meals
+        .filter(m => m.mecanographicNumber !== '56359')
+        .map(m => ({ ...m, importId: importRecord.id }));
       if (importRecord.sourceType === 'PTD' || validMeals.length > 0) {
         this.store.meals = this.store.meals.filter(m => {
+          if (m.importId && supersededIds.has(m.importId)) {
+            removedMealIds.push(m.id);
+            return false;
+          }
           if (m.source === importRecord.sourceType && affectedDates.has(m.date)) {
             removedMealIds.push(m.id);
             return false;
@@ -2307,7 +2471,7 @@ class StorageManager {
         user.name,
         'PUBLICAR_IMPORTACAO_EXCEL',
         'Importações',
-        `Importação ${importRecord.sourceType} (${importRecord.fileName}) publicada: ${preparedTasks.length} tarefas e ${validMeals.length} refeições`
+        `Importação ${importRecord.sourceType} v${importRecord.version} (${importRecord.fileName}) publicada: ${preparedTasks.length} tarefas e ${validMeals.length} refeições`
       );
 
       this.saveDirect();
@@ -2317,7 +2481,7 @@ class StorageManager {
 
       // Garantir persistência em lote no Firestore antes de concluir
       await Promise.all([
-        syncDocument('imports', importRecord.id, importRecord),
+        syncDocumentsBatch('imports', [importRecord, ...supersededImports]),
         deleteDocumentsBatch('tasks', removedTaskIds.filter(id => !newTaskIds.has(id))),
         deleteDocumentsBatch('meals', removedMealIds.filter(id => !newMealIds.has(id))),
         syncDocumentsBatch('tasks', preparedTasks),

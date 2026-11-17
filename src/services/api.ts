@@ -338,6 +338,12 @@ export const api = {
     });
   },
 
+  async deleteImport(id: string) {
+    return this.request<{ success: boolean; message: string }>(`/api/imports/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   // Audits
   async getAudits(): Promise<AuditLog[]> {
     return this.request<AuditLog[]>('/api/audits');

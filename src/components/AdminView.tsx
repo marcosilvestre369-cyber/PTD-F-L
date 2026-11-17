@@ -95,6 +95,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
   const [detectedWeeks, setDetectedWeeks] = useState<string[]>([]);
   const [importLoading, setImportLoading] = useState(false);
   const [importMsg, setImportMsg] = useState<{ success: boolean; text: string } | null>(null);
+  const [historyMsg, setHistoryMsg] = useState<{ success: boolean; text: string } | null>(null);
 
   // Auditoria
   const [audits, setAudits] = useState<AuditLog[]>([]);
@@ -410,20 +411,49 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
     }
   };
 
-  const handleRevertImportClick = (id: string) => {
+  const handleRevertImportClick = (imp: ImportRecord) => {
     setConfirmModal({
-      title: 'Anular Versão Publicada',
-      message: 'Tem a certeza de que pretende anular esta versão publicada? As tarefas e horários criados por esta versão serão revertidos.',
+      title: `Anular Versão v${imp.version} (${imp.sourceType})`,
+      message: `Tem a certeza de que pretende anular a versão v${imp.version} (${imp.fileName} · ${imp.week})? As tarefas e horários de refeição criados por esta versão serão revertidos.`,
       confirmLabel: 'Anular Versão',
       isDanger: true,
       onConfirm: async () => {
+        setHistoryMsg(null);
         try {
-          await api.revertImport(id);
+          const res = await api.revertImport(imp.id);
           const updated = await api.getImports();
           setImports(updated);
           onWeekAdded?.();
+          setHistoryMsg({
+            success: true,
+            text: res.message || `Versão v${imp.version} (${imp.sourceType}) anulada com sucesso.`,
+          });
         } catch (err: any) {
-          setImportMsg({ success: false, text: `Erro ao anular importação: ${err.message}` });
+          setHistoryMsg({ success: false, text: `Erro ao anular versão: ${err.message}` });
+        }
+      },
+    });
+  };
+
+  const handleDeleteImportClick = (imp: ImportRecord) => {
+    setConfirmModal({
+      title: `Remover Registo do Histórico`,
+      message: `Pretende remover permanentemente o registo "${imp.fileName}" (${imp.sourceType} v${imp.version} · ${imp.week}) do histórico?`,
+      confirmLabel: 'Remover Registo',
+      isDanger: true,
+      onConfirm: async () => {
+        setHistoryMsg(null);
+        try {
+          const res = await api.deleteImport(imp.id);
+          const updated = await api.getImports();
+          setImports(updated);
+          onWeekAdded?.();
+          setHistoryMsg({
+            success: true,
+            text: res.message || `Registo v${imp.version} removido do histórico.`,
+          });
+        } catch (err: any) {
+          setHistoryMsg({ success: false, text: `Erro ao remover registo: ${err.message}` });
         }
       },
     });
@@ -1331,17 +1361,39 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
 
           {/* Histórico dos Últimos 6 Ficheiros Carregados */}
           <div className="bg-surface-card rounded-2xl border border-line shadow-xs overflow-hidden">
-            <div className="p-4 border-b border-line flex items-center justify-between">
+            <div className="p-4 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-amber-ink" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface">
-                  Histórico dos Últimos 6 Ficheiros Carregados
-                </h3>
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface">
+                    Histórico dos Últimos 6 Ficheiros Carregados
+                  </h3>
+                  <p className="text-[11px] text-on-surface-muted">
+                    A versão mais atual publicada prevalece automaticamente e substitui versões anteriores da mesma semana.
+                  </p>
+                </div>
               </div>
-              <span className="text-[11px] text-on-surface-muted font-medium">
+              <span className="text-[11px] text-on-surface-muted font-medium shrink-0">
                 {Math.min(imports.length, 6)} de {imports.length} registos
               </span>
             </div>
+
+            {historyMsg && (
+              <div
+                className={`mx-4 mt-4 p-3 rounded-xl text-xs font-medium flex items-center gap-2 border ${
+                  historyMsg.success
+                    ? 'bg-success-tint border-success-border text-success-ink'
+                    : 'bg-danger-tint border-danger-border text-danger-ink'
+                }`}
+              >
+                {historyMsg.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-danger shrink-0" />
+                )}
+                <span>{historyMsg.text}</span>
+              </div>
+            )}
 
             {imports.length === 0 ? (
               <div className="p-8 text-center text-xs text-on-surface-muted">
@@ -1349,7 +1401,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[650px]">
+                <table className="w-full text-left text-xs min-w-[680px]">
                   <thead className="bg-surface-container border-b border-line text-on-surface-muted font-semibold">
                     <tr>
                       <th className="p-2.5">Ficheiro</th>
@@ -1379,17 +1431,35 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
                           {imp.publishedAt ? formatDateTimePt(imp.publishedAt) : (imp.uploadedAt ? formatDateTimePt(imp.uploadedAt) : '—')}
                         </td>
                         <td className="p-2.5">
-                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${imp.status === 'PUBLICADO' ? 'bg-success-tint text-success-ink border-success-border' : 'bg-surface-container text-on-surface-muted border-line'}`}>
-                            {imp.status}
-                          </span>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${imp.status === 'PUBLICADO' ? 'bg-success-tint text-success-ink border-success-border' : 'bg-surface-container text-on-surface-muted border-line'}`}>
+                              {imp.status}
+                            </span>
+                            {imp.status === 'ANULADO' && imp.supersededByVersion && (
+                              <span className="text-[10px] text-on-surface-subtle">
+                                Substituída pela v{imp.supersededByVersion}
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="p-2.5 text-right">
-                          {imp.status === 'PUBLICADO' && (
+                        <td className="p-2.5 text-right whitespace-nowrap">
+                          {imp.status === 'PUBLICADO' ? (
                             <button
-                              onClick={() => handleRevertImportClick(imp.id)}
-                              className="text-danger-ink hover:underline text-[11px] font-bold cursor-pointer"
+                              type="button"
+                              onClick={() => handleRevertImportClick(imp)}
+                              className="px-2.5 py-1 text-[11px] font-bold text-danger-ink bg-danger-tint hover:bg-danger-border/40 border border-danger-border rounded-lg transition-colors cursor-pointer"
                             >
                               Anular Versão
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteImportClick(imp)}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-on-surface-muted bg-surface-container hover:bg-surface-hover border border-line rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1"
+                              title="Remover registo anulado do histórico"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Remover</span>
                             </button>
                           )}
                         </td>

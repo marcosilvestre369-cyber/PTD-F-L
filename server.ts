@@ -563,7 +563,15 @@ app.post('/api/imports/:id/revert', authenticateToken, requireRole(['ADMIN']), a
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
-  return res.json({ success: true, message: 'Importação anulada.' });
+  return res.json({ success: true, message: 'Versão anulada com sucesso. Tarefas e refeições desta versão foram removidas.' });
+});
+
+app.delete('/api/imports/:id', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+  const result = await storage.deleteImportRecord(req.params.id, req.user!);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+  return res.json({ success: true, message: 'Registo removido do histórico.' });
 });
 
 // 9. Auditoria
@@ -751,13 +759,22 @@ app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMI
       const ptdMeals = parsed.generatedMeals;
       const ptdRows = parsed.previewRows.filter(r => r.taskType === 'PRINCIPAL');
 
+      const nextPtdVersion =
+        Math.max(
+          0,
+          ...storage
+            .getImports()
+            .filter(i => i.sourceType === 'PTD')
+            .map(i => i.version || 0)
+        ) + 1;
+
       const ptdRecord = {
         id: ptdImpId,
         sourceType: 'PTD' as const,
         week: safeWeek,
         fileName: safeFileName,
         fileHash: `hash-ptd-${Date.now()}`,
-        version: storage.getImports().filter(i => i.sourceType === 'PTD').length + 1,
+        version: nextPtdVersion,
         status: 'CARREGADO' as const,
         uploadedAt: new Date().toISOString(),
         uploadedBy: req.user!.name,
@@ -778,6 +795,14 @@ app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMI
     if ((scope === 'BOTH' || scope === 'PTS') && parsed.hasPtsSheet) {
       const ptsTasks = parsed.generatedTasks.filter(t => t.source === 'PTS');
       const ptsRows = parsed.previewRows.filter(r => r.taskType === 'SECUNDARIA');
+      const nextPtsVersion =
+        Math.max(
+          0,
+          ...storage
+            .getImports()
+            .filter(i => i.sourceType === 'PTS')
+            .map(i => i.version || 0)
+        ) + 1;
 
       const ptsRecord = {
         id: ptsImpId,
@@ -785,7 +810,7 @@ app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMI
         week: safeWeek,
         fileName: safeFileName,
         fileHash: `hash-pts-${Date.now()}`,
-        version: storage.getImports().filter(i => i.sourceType === 'PTS').length + 1,
+        version: nextPtsVersion,
         status: 'CARREGADO' as const,
         uploadedAt: new Date().toISOString(),
         uploadedBy: req.user!.name,
