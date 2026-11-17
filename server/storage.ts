@@ -165,7 +165,21 @@ class StorageManager {
   }
 
   public async ready(): Promise<void> {
-    await this.hydrationPromise;
+    await Promise.race([
+      this.hydrationPromise,
+      new Promise<void>(resolve => setTimeout(resolve, 6000)),
+    ]);
+  }
+
+  private async waitBrieflyForFirestore(ops: Promise<any>, maxMs = 3000): Promise<void> {
+    try {
+      await Promise.race([
+        ops.catch(err => console.warn('[Firebase] Aviso de sincronização em background:', err)),
+        new Promise<void>(resolve => setTimeout(resolve, maxMs)),
+      ]);
+    } catch {
+      // Nunca bloquear a resposta HTTP por falha/latência do Firestore
+    }
   }
 
   private init() {
@@ -1953,13 +1967,15 @@ class StorageManager {
 
     const newTaskIds = new Set(addedTasks.map(t => t.id));
     const newMealIds = new Set(validMeals.map(m => m.id));
-    await Promise.all([
-      syncDocumentsBatch('imports', [importRecord, ...supersededImports]),
-      deleteDocumentsBatch('tasks', removedTaskIds.filter(id => !newTaskIds.has(id))),
-      deleteDocumentsBatch('meals', removedMealIds.filter(id => !newMealIds.has(id))),
-      syncDocumentsBatch('tasks', addedTasks),
-      syncDocumentsBatch('meals', validMeals),
-    ]);
+    await this.waitBrieflyForFirestore(
+      Promise.all([
+        syncDocumentsBatch('imports', [importRecord, ...supersededImports]),
+        deleteDocumentsBatch('tasks', removedTaskIds.filter(id => !newTaskIds.has(id))),
+        deleteDocumentsBatch('meals', removedMealIds.filter(id => !newMealIds.has(id))),
+        syncDocumentsBatch('tasks', addedTasks),
+        syncDocumentsBatch('meals', validMeals),
+      ])
+    );
 
     return { success: true };
   }
@@ -2041,11 +2057,13 @@ class StorageManager {
     );
     this.saveDirect();
 
-    await Promise.all([
-      syncDocument('imports', target.id, target),
-      deleteDocumentsBatch('tasks', removedTaskIds),
-      deleteDocumentsBatch('meals', removedMealIds),
-    ]);
+    await this.waitBrieflyForFirestore(
+      Promise.all([
+        syncDocument('imports', target.id, target),
+        deleteDocumentsBatch('tasks', removedTaskIds),
+        deleteDocumentsBatch('meals', removedMealIds),
+      ])
+    );
 
     return { success: true };
   }
@@ -2068,7 +2086,7 @@ class StorageManager {
       `Registo removido do histórico: ${target.fileName} (${target.sourceType} v${target.version} - ${target.week})`
     );
     this.saveDirect();
-    await deleteDocument('imports', importId);
+    await this.waitBrieflyForFirestore(deleteDocument('imports', importId));
 
     return { success: true };
   }
@@ -2479,14 +2497,16 @@ class StorageManager {
       const newTaskIds = new Set(preparedTasks.map(t => t.id));
       const newMealIds = new Set(validMeals.map(m => m.id));
 
-      // Garantir persistência em lote no Firestore antes de concluir
-      await Promise.all([
-        syncDocumentsBatch('imports', [importRecord, ...supersededImports]),
-        deleteDocumentsBatch('tasks', removedTaskIds.filter(id => !newTaskIds.has(id))),
-        deleteDocumentsBatch('meals', removedMealIds.filter(id => !newMealIds.has(id))),
-        syncDocumentsBatch('tasks', preparedTasks),
-        syncDocumentsBatch('meals', validMeals),
-      ]);
+      // Garantir persistência em lote no Firestore sem ultrapassar o timeout do gateway HTTP
+      await this.waitBrieflyForFirestore(
+        Promise.all([
+          syncDocumentsBatch('imports', [importRecord, ...supersededImports]),
+          deleteDocumentsBatch('tasks', removedTaskIds.filter(id => !newTaskIds.has(id))),
+          deleteDocumentsBatch('meals', removedMealIds.filter(id => !newMealIds.has(id))),
+          syncDocumentsBatch('tasks', preparedTasks),
+          syncDocumentsBatch('meals', validMeals),
+        ])
+      );
 
       return { success: true };
     } catch (err: any) {

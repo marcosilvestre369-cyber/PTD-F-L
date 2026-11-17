@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { initializeApp } from 'firebase/app';
 import {
+  initializeFirestore,
   getFirestore,
   doc,
   setDoc,
@@ -114,6 +115,26 @@ export function getFirebaseConfigInfo() {
   };
 }
 
+const FIRESTORE_OP_TIMEOUT_MS = 4500;
+const FIRESTORE_HYDRATE_TIMEOUT_MS = 8000;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>(resolve => {
+        timer = setTimeout(() => {
+          console.warn(`[Firebase] Timeout (${ms}ms) em ${label}. A continuar sem bloquear.`);
+          resolve(fallback);
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export function initFirebase(): Firestore | null {
   if (isInitialized && db) return db;
 
@@ -135,16 +156,20 @@ export function initFirebase(): Firestore | null {
       appId: config.appId,
     });
 
-    // Conectar à base de dados Firestore aprovisionada
+    // Conectar à base de dados Firestore aprovisionada (Long Polling evita bloqueios WebChannel em Node/Hostinger)
     const databaseId = config.firestoreDatabaseId || '(default)';
-    db = getFirestore(app, databaseId);
+    try {
+      db = initializeFirestore(app, { experimentalForceLongPolling: true }, databaseId);
+    } catch {
+      db = getFirestore(app, databaseId);
+    }
     activeProjectId = config.projectId;
     activeDatabaseId = databaseId;
     isInitialized = true;
     console.log(`[Firebase] Conectado com sucesso ao Firestore (${config.projectId} / ${databaseId})`);
 
-    // Validar conexão conforme diretivas
-    testConnection(db);
+    // Validar conexão conforme diretivas (em background sem bloquear)
+    testConnection(db).catch(() => {});
     return db;
   } catch (error) {
     console.error('[Firebase] Erro ao inicializar Firestore:', error);
@@ -154,7 +179,12 @@ export function initFirebase(): Firestore | null {
 
 async function testConnection(firestoreDb: Firestore) {
   try {
-    await getDocFromServer(doc(firestoreDb, 'test', 'connection'));
+    await withTimeout(
+      getDocFromServer(doc(firestoreDb, 'test', 'connection')).then(() => true),
+      FIRESTORE_OP_TIMEOUT_MS,
+      'testConnection',
+      false
+    );
   } catch (error: any) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('[Firebase] Aviso de conexão offline:', error.message);
@@ -206,7 +236,13 @@ export async function syncDocumentsBatch(
         if (!item?.id) continue;
         batch.set(doc(firestore, collectionName, item.id), sanitizeForFirestore(item));
       }
-      await batch.commit();
+      const ok = await withTimeout(
+        batch.commit().then(() => true),
+        FIRESTORE_OP_TIMEOUT_MS,
+        `syncDocumentsBatch(${collectionName})`,
+        false
+      );
+      if (!ok) return false;
     }
     return true;
   } catch (err) {
@@ -231,7 +267,13 @@ export async function deleteDocumentsBatch(collectionName: string, ids: string[]
       for (const id of chunk) {
         batch.delete(doc(firestore, collectionName, id));
       }
-      await batch.commit();
+      const ok = await withTimeout(
+        batch.commit().then(() => true),
+        FIRESTORE_OP_TIMEOUT_MS,
+        `deleteDocumentsBatch(${collectionName})`,
+        false
+      );
+      if (!ok) return false;
     }
     return true;
   } catch (err) {
@@ -296,8 +338,12 @@ export async function syncDocument(collectionName: string, id: string, docData: 
   if (!firestore) return false;
   try {
     const cleanData = sanitizeForFirestore(docData);
-    await setDoc(doc(firestore, collectionName, id), cleanData);
-    return true;
+    return await withTimeout(
+      setDoc(doc(firestore, collectionName, id), cleanData).then(() => true),
+      FIRESTORE_OP_TIMEOUT_MS,
+      `syncDocument(${collectionName}/${id})`,
+      false
+    );
   } catch (err) {
     console.warn(`[Firebase] Erro ao salvar ${collectionName}/${id}:`, err);
     return false;
@@ -311,8 +357,12 @@ export async function deleteDocument(collectionName: string, id: string): Promis
   const firestore = initFirebase();
   if (!firestore) return false;
   try {
-    await deleteDoc(doc(firestore, collectionName, id));
-    return true;
+    return await withTimeout(
+      deleteDoc(doc(firestore, collectionName, id)).then(() => true),
+      FIRESTORE_OP_TIMEOUT_MS,
+      `deleteDocument(${collectionName}/${id})`,
+      false
+    );
   } catch (err) {
     console.warn(`[Firebase] Erro ao apagar ${collectionName}/${id}:`, err);
     return false;
@@ -383,6 +433,27 @@ export async function loadAllFromFirestore(): Promise<{
   if (!firestore) return null;
 
   try {
+    const snapshots = await withTimeout(
+      Promise.all([
+        getDocs(collection(firestore, 'tasks')),
+        getDocs(collection(firestore, 'meals')),
+        getDocs(collection(firestore, 'stocks')),
+        getDocs(collection(firestore, 'pdes')),
+        getDocs(collection(firestore, 'notifications')),
+        getDocs(collection(firestore, 'collaborators')),
+        getDocs(collection(firestore, 'articles')),
+        getDocs(collection(firestore, 'imports')),
+        getDocs(collection(firestore, 'audits')),
+      ]),
+      FIRESTORE_HYDRATE_TIMEOUT_MS,
+      'loadAllFromFirestore',
+      null
+    );
+
+    if (!snapshots) {
+      return null;
+    }
+
     const [
       tasksSnap,
       mealsSnap,
@@ -393,17 +464,7 @@ export async function loadAllFromFirestore(): Promise<{
       articlesSnap,
       importsSnap,
       auditsSnap,
-    ] = await Promise.all([
-      getDocs(collection(firestore, 'tasks')),
-      getDocs(collection(firestore, 'meals')),
-      getDocs(collection(firestore, 'stocks')),
-      getDocs(collection(firestore, 'pdes')),
-      getDocs(collection(firestore, 'notifications')),
-      getDocs(collection(firestore, 'collaborators')),
-      getDocs(collection(firestore, 'articles')),
-      getDocs(collection(firestore, 'imports')),
-      getDocs(collection(firestore, 'audits')),
-    ]);
+    ] = snapshots;
 
     const tasks: DailyTask[] = [];
     tasksSnap.forEach(d => {
