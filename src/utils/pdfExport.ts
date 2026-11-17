@@ -470,7 +470,7 @@ export function exportDailyReportPdf(report: DailyReportSummary) {
           `${c.pendingTasks}`,
           `${c.completionRate}%`,
           `${c.weeklyCompletionRate ?? 0}%`,
-          eligible ? `${c.annualScore?.totalPoints ?? 0} pts` : 'Isento',
+          eligible ? `${c.annualScore?.totalPoints ?? 0}` : 'Isento',
         ];
       });
 

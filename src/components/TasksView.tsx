@@ -695,7 +695,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
           {/* IPA (apenas para COLABORADOR; Admins e Gestores estão isentos) */}
           {performance.annualScore?.eligible && (
             <div
-              title={`IPA ${performance.annualScore.year}: Tarefas (${performance.annualScore.tasksNetPoints} pts) · Stocks (${performance.annualScore.stockNetPoints} pts) · PDE (${performance.annualScore.pdeNetPoints} pts)`}
+              title={`IPA ${performance.annualScore.year}: Tarefas (${performance.annualScore.tasksNetPoints}) · Stocks (${performance.annualScore.stockNetPoints}) · PDE (${performance.annualScore.pdeNetPoints})`}
               className="col-span-4 min-w-0 bg-surface-container text-on-surface rounded-2xl border border-amber-border/70 p-3.5 sm:p-5 shadow-2xs flex flex-col justify-between gap-2.5 sm:gap-3"
             >
               <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-amber-ink leading-tight">
@@ -704,9 +704,6 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
               <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0 flex-wrap">
                 <span className="text-xl sm:text-3xl font-bold font-mono tabular-nums tracking-tight text-on-surface leading-none">
                   {performance.annualScore.totalPoints}
-                </span>
-                <span className="text-[11px] sm:text-xs font-semibold text-amber-ink uppercase tracking-wider">
-                  pts
                 </span>
               </div>
             </div>

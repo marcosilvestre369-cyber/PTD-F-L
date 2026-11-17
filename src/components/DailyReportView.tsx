@@ -781,7 +781,7 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
 
               <div className="bg-surface-container border border-line rounded-xl px-3 py-2 text-[11px] text-on-surface-muted flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  <strong className="text-on-surface">IPA ({effectiveDate.slice(0, 4)}):</strong> Tarefas (+5 concluída, -3 não feita, -2 por assinalar) · Dia 100% (+8) · Semana &gt;90% (+5 após domingo) · Stocks Excesso/Rotura (+1 registo, +6 tratado) · PDE (+4 registo, +9 resolvido)
+                  <strong className="text-on-surface">IPA ({effectiveDate.slice(0, 4)}):</strong> Tarefas (+5 concluída, -2 não feita, -3 por assinalar após domingo) · Dia 100% (+8) · Semana &gt;90% (+5 após domingo) · Stocks Excesso/Rotura (+1 registo, +6 tratado) · PDE (+4 registo, +9 resolvido)
                 </span>
                 <span className="text-on-surface-subtle font-medium">
                   Administradores e Gestores de Stocks & PDE não estão sujeitos a IPA · Reinicia anualmente
@@ -884,7 +884,7 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
                               {c.annualScore?.eligible ? (
                                 <td className="py-2.5 px-3.5 text-right font-mono tabular-nums font-black text-amber-ink whitespace-nowrap">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-amber-tint border border-amber-border">
-                                    {c.annualScore.totalPoints} pts
+                                    {c.annualScore.totalPoints}
                                   </span>
                                 </td>
                               ) : (

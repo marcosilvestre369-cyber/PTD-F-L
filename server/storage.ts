@@ -2446,15 +2446,12 @@ class StorageManager {
     const taskTotalCount = yearTasks.length;
     const taskCompletedCount = yearTasks.filter(t => t.status === 'FEITA').length;
     const taskNotDoneCount = yearTasks.filter(t => t.status === 'NAO_FEITA').length;
-    const taskPendingCount = yearTasks.filter(t => t.status === 'POR_ASSINALAR').length;
     const taskCompletionRate = taskTotalCount > 0 ? Math.round((taskCompletedCount / taskTotalCount) * 100) : 0;
 
     // Regra 2: +5 pontos por cada tarefa concluída
     const taskCompletedPoints = taskCompletedCount * 5;
-    // Regra 3: -3 pontos por cada tarefa não feita
-    const taskNotDonePoints = taskNotDoneCount * -3;
-    // Regra 4: -2 pontos por cada tarefa por assinalar
-    const taskPendingPoints = taskPendingCount * -2;
+    // Regra 3: -2 pontos por cada tarefa não feita
+    const taskNotDonePoints = taskNotDoneCount * -2;
 
     // Regra 5: Se a taxa de cumprimento (dia) for de 100%, ganha +8 pontos por dia
     const tasksByDay = new Map<string, DailyTask[]>();
@@ -2471,7 +2468,9 @@ class StorageManager {
     }
     const daily100Points = daily100Count * 8;
 
-    // Regra 6: Se a taxa de cumprimento tarefas (semana) for > 90%, ganha +5 pontos (só atribuído após o último dia da semana)
+    // Regras 4 e 6 (avaliadas apenas após o último dia da semana):
+    // - Regra 4: -3 pontos por cada tarefa por assinalar (atribuído após o último dia da semana)
+    // - Regra 6: +5 pontos se a taxa de cumprimento semanal for > 90% (atribuído após o último dia da semana)
     const tasksByWeek = new Map<string, { weekEnd: string; tasks: DailyTask[] }>();
     for (const t of yearTasks) {
       const wb = getWeekBoundsFromDate(t.date, numericYear);
@@ -2482,18 +2481,21 @@ class StorageManager {
         tasksByWeek.set(wb.weekStart, { weekEnd: wb.weekEnd, tasks: [t] });
       }
     }
+    let taskPendingCount = 0;
     let weeklyOver90Count = 0;
     for (const { weekEnd, tasks: weekTasks } of tasksByWeek.values()) {
       // Só atribuído após o último dia da semana (Domingo) ter terminado
       if (todayLisbonStr <= weekEnd) continue;
       const total = weekTasks.length;
       if (total === 0) continue;
+      taskPendingCount += weekTasks.filter(t => t.status === 'POR_ASSINALAR').length;
       const completed = weekTasks.filter(t => t.status === 'FEITA').length;
       const rate = Math.round((completed / total) * 100);
       if (rate > 90) {
         weeklyOver90Count += 1;
       }
     }
+    const taskPendingPoints = taskPendingCount * -3;
     const weeklyOver90Points = weeklyOver90Count * 5;
 
     const tasksNetPoints =
