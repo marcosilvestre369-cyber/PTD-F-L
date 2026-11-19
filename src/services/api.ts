@@ -407,7 +407,7 @@ export const api = {
     payload: {
       status: PdeStatus;
       resolutionNotes?: string;
-      resolutionAction?: string;
+      decidedByNumber?: string;
     }
   ): Promise<{ success: boolean; message: string; pde: PdeRequest }> {
     return this.request<{ success: boolean; message: string; pde: PdeRequest }>(`/api/pdes/${id}/status`, {

@@ -36,21 +36,13 @@ const DEFECT_REASONS = [
   'Outro defeito de qualidade',
 ];
 
-const RESOLUTION_ACTIONS = [
-  'Devolução total ao fornecedor',
-  'Devolução parcial ao fornecedor',
-  'Abate / Quebra de stock por qualidade',
-  'Reclassificação comercial',
-  'Reclamação formal à plataforma logística',
-  'Outra ação corretiva',
-];
-
 export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
   const isAdmin = currentUser.role === 'ADMIN';
   const canDecide = isAdmin || currentUser.role === 'GESTOR_STOCKS_PDE';
 
   const [pdes, setPdes] = useState<PdeRequest[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('TODOS');
@@ -72,10 +64,10 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Modal de Resolução (Admin)
+  // Modal de Resolução (Admin / Gestor)
   const [resolvingPde, setResolvingPde] = useState<PdeRequest | null>(null);
   const [resolutionStatus, setResolutionStatus] = useState<PdeStatus>('RESOLVIDO');
-  const [resolutionAction, setResolutionAction] = useState(RESOLUTION_ACTIONS[0]);
+  const [decidedByNumber, setDecidedByNumber] = useState(currentUser.mecanographicNumber);
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [resolvingLoading, setResolvingLoading] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
@@ -98,21 +90,33 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pdeList, articleList] = await Promise.all([
+      const [pdeList, articleList, colabList] = await Promise.all([
         api.getPdes({
           status: statusFilter !== 'TODOS' ? statusFilter : undefined,
           myOnly: myOnlyFilter,
         }),
         api.getArticles(),
+        api.getCollaborators(),
       ]);
       setPdes(pdeList);
       setArticles(articleList);
+      setCollaborators(colabList);
     } catch (err) {
       console.error('Erro ao carregar PDEs:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  const decisionMakers = (() => {
+    const managers = collaborators.filter(
+      c => c.status === 'ATIVO' && (c.role === 'ADMIN' || c.role === 'GESTOR_STOCKS_PDE')
+    );
+    if (canDecide && !managers.some(c => c.mecanographicNumber === currentUser.mecanographicNumber)) {
+      return [currentUser, ...managers];
+    }
+    return managers;
+  })();
 
   // Filtragem de artigos para seleção no formulário
   const filteredArticles = articleSearch.trim()
@@ -227,12 +231,16 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
 
   const handleResolveSubmit = async () => {
     if (!resolvingPde) return;
+    if (!decidedByNumber.trim()) {
+      setResolveError('Indique quem tomou a decisão.');
+      return;
+    }
     setResolvingLoading(true);
     setResolveError(null);
     try {
       await api.updatePdeStatus(resolvingPde.id, {
         status: resolutionStatus,
-        resolutionAction: resolutionStatus === 'RESOLVIDO' ? resolutionAction : undefined,
+        decidedByNumber: decidedByNumber.trim(),
         resolutionNotes: resolutionNotes.trim() || undefined,
       });
       setResolvingPde(null);
@@ -535,11 +543,13 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                       <span className="text-[11px] text-on-surface-subtle italic">Sem fotografias anexadas.</span>
                     )}
 
-                    {/* Resolução do Administrador */}
+                    {/* Resolução do Administrador / Gestor */}
                     {pde.resolvedAt && (
                       <div className="bg-amber-tint/70 border border-amber-border p-2.5 rounded-xl text-xs space-y-1 mt-2">
                         <div className="flex items-center justify-between font-bold text-on-surface">
-                          <span>Decisão: {pde.resolutionAction || pde.status}</span>
+                          <span>
+                            Decisão: {isResolved ? 'Resolvido' : isNotConsidered ? 'Não Considerado' : pde.status}
+                          </span>
                           <span className="text-[11px] font-normal text-on-surface-muted">
                             {new Date(pde.resolvedAt).toLocaleDateString('pt-PT')}
                           </span>
@@ -548,7 +558,7 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                           <p className="text-on-surface-muted font-medium">{pde.resolutionNotes}</p>
                         )}
                         <span className="text-[10px] text-on-surface-subtle block">
-                          Resolvido por: {pde.resolvedByName} ({pde.resolvedByNumber})
+                          Decidido por: <strong className="text-on-surface-muted">{pde.resolvedByName}</strong> ({pde.resolvedByNumber})
                         </span>
                       </div>
                     )}
@@ -576,8 +586,9 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                         onClick={() => {
                           setResolvingPde(pde);
                           setResolutionStatus(pde.status === 'NAO_CONSIDERADO' ? 'NAO_CONSIDERADO' : 'RESOLVIDO');
-                          setResolutionAction(pde.resolutionAction || RESOLUTION_ACTIONS[0]);
+                          setDecidedByNumber(pde.resolvedByNumber || currentUser.mecanographicNumber);
                           setResolutionNotes(pde.resolutionNotes || '');
+                          setResolveError(null);
                         }}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold text-on-primary bg-primary hover:bg-primary-hover transition-colors cursor-pointer whitespace-nowrap"
                       >
@@ -916,24 +927,26 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                 </select>
               </div>
 
-              {resolutionStatus === 'RESOLVIDO' && (
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-on-surface uppercase tracking-wider">
-                    Ação Operacional Tomada *
-                  </label>
-                  <select
-                    value={resolutionAction}
-                    onChange={e => setResolutionAction(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-surface-container border border-line rounded-xl text-on-surface font-semibold focus:bg-surface-card focus:ring-2 focus:ring-amber-brand focus:outline-none cursor-pointer"
-                  >
-                    {RESOLUTION_ACTIONS.map(act => (
-                      <option key={act} value={act}>
-                        {act}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-on-surface uppercase tracking-wider">
+                  Quem Tomou a Decisão *
+                </label>
+                <select
+                  required
+                  value={decidedByNumber}
+                  onChange={e => setDecidedByNumber(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-surface-container border border-line rounded-xl text-on-surface font-semibold focus:bg-surface-card focus:ring-2 focus:ring-amber-brand focus:outline-none cursor-pointer"
+                >
+                  <option value="" disabled>
+                    Selecione Administrador ou Gestor Stocks & PDE...
+                  </option>
+                  {decisionMakers.map(c => (
+                    <option key={c.id} value={c.mecanographicNumber}>
+                      {c.name} ({c.mecanographicNumber}) — {c.role === 'ADMIN' ? 'Admin' : 'Gestor Stocks & PDE'}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-on-surface uppercase tracking-wider">

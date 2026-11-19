@@ -590,9 +590,8 @@ export function exportSinglePdeA4Pdf(pde: PdeRequest) {
       ['Colaborador Subscritor', `${pde.submittedByName} (${pde.submittedByNumber})`],
       ['Data de Submissão', formatDateTimePt(pde.submittedAt)],
       ['Estado Atual', formatPdeStatusPt(pde.status, true)],
-      ['Ação de Resolução', pde.resolutionAction || 'Pendente de validação pela administração'],
+      ['Decidido por', pde.resolvedByName ? `${pde.resolvedByName}${pde.resolvedByNumber ? ` (${pde.resolvedByNumber})` : ''} em ${formatDateTimePt(pde.resolvedAt || '')}` : '—'],
       ['Notas da Decisão', pde.resolutionNotes || 'Sem observações registadas'],
-      ['Decidido por', pde.resolvedByName ? `${pde.resolvedByName} em ${formatDateTimePt(pde.resolvedAt || '')}` : '—'],
     ],
     theme: 'grid',
     styles: {

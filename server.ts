@@ -638,14 +638,14 @@ app.post('/api/pdes', authenticateToken, (req: AuthenticatedRequest, res: Respon
 });
 
 app.patch('/api/pdes/:id/status', authenticateToken, requireRole(['ADMIN', 'GESTOR_STOCKS_PDE']), (req: AuthenticatedRequest, res: Response) => {
-  const { status, resolutionNotes, resolutionAction } = req.body;
+  const { status, resolutionNotes, decidedByNumber } = req.body;
   if (!status || !['PENDENTE', 'RESOLVIDO', 'NAO_CONSIDERADO'].includes(status)) {
     return res.status(400).json({ error: 'Estado de PDE inválido. Utilize RESOLVIDO ou NAO_CONSIDERADO.' });
   }
 
   const result = storage.updatePdeStatus(
     req.params.id,
-    { status, resolutionNotes, resolutionAction },
+    { status, resolutionNotes, decidedByNumber },
     req.user!
   );
 
