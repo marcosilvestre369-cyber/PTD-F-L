@@ -42,7 +42,6 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
 
   const [pdes, setPdes] = useState<PdeRequest[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
-  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('TODOS');
@@ -67,7 +66,6 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
   // Modal de Resolução (Admin / Gestor)
   const [resolvingPde, setResolvingPde] = useState<PdeRequest | null>(null);
   const [resolutionStatus, setResolutionStatus] = useState<PdeStatus>('RESOLVIDO');
-  const [decidedByNumber, setDecidedByNumber] = useState(currentUser.mecanographicNumber);
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [resolvingLoading, setResolvingLoading] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
@@ -90,33 +88,21 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pdeList, articleList, colabList] = await Promise.all([
+      const [pdeList, articleList] = await Promise.all([
         api.getPdes({
           status: statusFilter !== 'TODOS' ? statusFilter : undefined,
           myOnly: myOnlyFilter,
         }),
         api.getArticles(),
-        api.getCollaborators(),
       ]);
       setPdes(pdeList);
       setArticles(articleList);
-      setCollaborators(colabList);
     } catch (err) {
       console.error('Erro ao carregar PDEs:', err);
     } finally {
       setLoading(false);
     }
   };
-
-  const decisionMakers = (() => {
-    const managers = collaborators.filter(
-      c => c.status === 'ATIVO' && (c.role === 'ADMIN' || c.role === 'GESTOR_STOCKS_PDE')
-    );
-    if (canDecide && !managers.some(c => c.mecanographicNumber === currentUser.mecanographicNumber)) {
-      return [currentUser, ...managers];
-    }
-    return managers;
-  })();
 
   // Filtragem de artigos para seleção no formulário
   const filteredArticles = articleSearch.trim()
@@ -231,16 +217,11 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
 
   const handleResolveSubmit = async () => {
     if (!resolvingPde) return;
-    if (!decidedByNumber.trim()) {
-      setResolveError('Indique quem tomou a decisão.');
-      return;
-    }
     setResolvingLoading(true);
     setResolveError(null);
     try {
       await api.updatePdeStatus(resolvingPde.id, {
         status: resolutionStatus,
-        decidedByNumber: decidedByNumber.trim(),
         resolutionNotes: resolutionNotes.trim() || undefined,
       });
       setResolvingPde(null);
@@ -558,7 +539,7 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                           <p className="text-on-surface-muted font-medium">{pde.resolutionNotes}</p>
                         )}
                         <span className="text-[10px] text-on-surface-subtle block">
-                          Decidido por: <strong className="text-on-surface-muted">{pde.resolvedByName}</strong> ({pde.resolvedByNumber})
+                          Tratado por: <strong className="text-on-surface-muted">{pde.resolvedByName}</strong> ({pde.resolvedByNumber})
                         </span>
                       </div>
                     )}
@@ -586,7 +567,6 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                         onClick={() => {
                           setResolvingPde(pde);
                           setResolutionStatus(pde.status === 'NAO_CONSIDERADO' ? 'NAO_CONSIDERADO' : 'RESOLVIDO');
-                          setDecidedByNumber(pde.resolvedByNumber || currentUser.mecanographicNumber);
                           setResolutionNotes(pde.resolutionNotes || '');
                           setResolveError(null);
                         }}
@@ -929,23 +909,14 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
 
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-on-surface uppercase tracking-wider">
-                  Quem Tomou a Decisão *
+                  Tratado por:
                 </label>
-                <select
-                  required
-                  value={decidedByNumber}
-                  onChange={e => setDecidedByNumber(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-surface-container border border-line rounded-xl text-on-surface font-semibold focus:bg-surface-card focus:ring-2 focus:ring-amber-brand focus:outline-none cursor-pointer"
-                >
-                  <option value="" disabled>
-                    Selecione Administrador ou Gestor Stocks & PDE...
-                  </option>
-                  {decisionMakers.map(c => (
-                    <option key={c.id} value={c.mecanographicNumber}>
-                      {c.name} ({c.mecanographicNumber}) — {c.role === 'ADMIN' ? 'Admin' : 'Gestor Stocks & PDE'}
-                    </option>
-                  ))}
-                </select>
+                <div className="w-full px-3 py-2 text-xs bg-surface-container border border-line rounded-xl text-on-surface font-semibold flex items-center justify-between gap-2">
+                  <span>{currentUser.name}</span>
+                  <span className="font-mono text-on-surface-muted">
+                    Nº {currentUser.mecanographicNumber}
+                  </span>
+                </div>
               </div>
 
               <div className="space-y-1">

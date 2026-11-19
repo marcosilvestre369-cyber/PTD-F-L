@@ -2293,33 +2293,12 @@ class StorageManager {
     update: {
       status: PdeStatus;
       resolutionNotes?: string;
-      decidedByNumber?: string;
     },
     user: Collaborator
   ): { success: boolean; pde?: PdeRequest; error?: string } {
     const pde = this.store.pdes.find(p => p.id === id);
     if (!pde) {
       return { success: false, error: 'Pedido de PDE não encontrado.' };
-    }
-
-    let decisionMaker: Collaborator = user;
-    if (update.status === 'RESOLVIDO' || update.status === 'NAO_CONSIDERADO') {
-      if (update.decidedByNumber && update.decidedByNumber.trim() !== '') {
-        const candidate = update.decidedByNumber.trim();
-        const matched = this.store.collaborators.find(
-          c =>
-            c.status === 'ATIVO' &&
-            (c.role === 'ADMIN' || c.role === 'GESTOR_STOCKS_PDE') &&
-            (c.mecanographicNumber === candidate || c.name.toLowerCase() === candidate.toLowerCase())
-        );
-        if (!matched) {
-          return {
-            success: false,
-            error: 'Quem tomou a decisão tem de ser um Administrador ou Gestor de Stocks & PDE ativo.',
-          };
-        }
-        decisionMaker = matched;
-      }
     }
 
     const prevStatus = pde.status;
@@ -2329,14 +2308,14 @@ class StorageManager {
     if (update.status === 'RESOLVIDO') {
       pde.photos = []; // FOTOS APAGADAS DA BASE DE DADOS
       pde.resolvedAt = new Date().toISOString();
-      pde.resolvedByNumber = decisionMaker.mecanographicNumber;
-      pde.resolvedByName = decisionMaker.name;
+      pde.resolvedByNumber = user.mecanographicNumber;
+      pde.resolvedByName = user.name;
       pde.resolutionNotes = update.resolutionNotes?.trim() || undefined;
       pde.resolutionAction = undefined;
     } else if (update.status === 'NAO_CONSIDERADO') {
       pde.resolvedAt = new Date().toISOString();
-      pde.resolvedByNumber = decisionMaker.mecanographicNumber;
-      pde.resolvedByName = decisionMaker.name;
+      pde.resolvedByNumber = user.mecanographicNumber;
+      pde.resolvedByName = user.name;
       pde.resolutionNotes = update.resolutionNotes?.trim() || undefined;
       pde.resolutionAction = undefined;
     } else if (update.status === 'PENDENTE') {
@@ -2351,7 +2330,7 @@ class StorageManager {
       user.name,
       'ATUALIZAR_PDE',
       'PDE',
-      `PDE ${pde.id} (${pde.sku}) alterado de ${prevStatus} para ${pde.status} · Decisão de ${decisionMaker.name} (${decisionMaker.mecanographicNumber}). ${update.status === 'RESOLVIDO' ? 'Fotografias apagadas da base de dados com sucesso.' : ''}`
+      `PDE ${pde.id} (${pde.sku}) alterado de ${prevStatus} para ${pde.status} · Tratado por ${user.name} (${user.mecanographicNumber}). ${update.status === 'RESOLVIDO' ? 'Fotografias apagadas da base de dados com sucesso.' : ''}`
     );
 
     this.saveDirect();

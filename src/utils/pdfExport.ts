@@ -590,7 +590,7 @@ export function exportSinglePdeA4Pdf(pde: PdeRequest) {
       ['Colaborador Subscritor', `${pde.submittedByName} (${pde.submittedByNumber})`],
       ['Data de Submissão', formatDateTimePt(pde.submittedAt)],
       ['Estado Atual', formatPdeStatusPt(pde.status, true)],
-      ['Decidido por', pde.resolvedByName ? `${pde.resolvedByName}${pde.resolvedByNumber ? ` (${pde.resolvedByNumber})` : ''} em ${formatDateTimePt(pde.resolvedAt || '')}` : '—'],
+      ['Tratado por', pde.resolvedByName ? `${pde.resolvedByName}${pde.resolvedByNumber ? ` (${pde.resolvedByNumber})` : ''} em ${formatDateTimePt(pde.resolvedAt || '')}` : '—'],
       ['Notas da Decisão', pde.resolutionNotes || 'Sem observações registadas'],
     ],
     theme: 'grid',
