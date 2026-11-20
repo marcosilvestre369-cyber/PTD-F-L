@@ -241,7 +241,7 @@ app.patch('/api/collaborators/:id/deactivate', authenticateToken, requireRole(['
 
 app.patch('/api/collaborators/:id/role', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
   const { role } = req.body;
-  if (role !== 'ADMIN' && role !== 'COLABORADOR' && role !== 'GESTOR_STOCKS_PDE') {
+  if (role !== 'ADMIN' && role !== 'ADMIN_2' && role !== 'COLABORADOR' && role !== 'GESTOR_STOCKS_PDE') {
     return res.status(400).json({ error: 'Perfil inválido.' });
   }
   const result = storage.updateCollaboratorRole(req.params.id, role, req.user!);
@@ -283,19 +283,20 @@ app.post('/api/weeks/add-next', authenticateToken, requireRole(['ADMIN']), async
 app.get('/api/tasks', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   const { date, collaboratorNumber } = req.query as { date?: string; collaboratorNumber?: string };
   const user = req.user!;
+  const canViewAll = user.role === 'ADMIN' || user.role === 'ADMIN_2';
 
-  if (user.role !== 'ADMIN' && date && !storage.isDateVisibleForCollaborator(date)) {
+  if (!canViewAll && date && !storage.isDateVisibleForCollaborator(date)) {
     return res.status(403).json({
       error: 'Acesso restrito: colaboradores apenas podem consultar tarefas da semana a decorrer (e da semana anterior nas primeiras 3 horas da nova semana).',
     });
   }
 
-  // Se não for admin, consulta estritamente as suas próprias tarefas
-  const targetNumber = user.role === 'ADMIN' && collaboratorNumber ? collaboratorNumber : user.mecanographicNumber;
+  // Se não for admin / admin 2, consulta estritamente as suas próprias tarefas
+  const targetNumber = canViewAll && collaboratorNumber ? collaboratorNumber : user.mecanographicNumber;
 
   const tasks = storage.getTasks({
     date,
-    mecanographicNumber: user.role === 'ADMIN' && !collaboratorNumber ? undefined : targetNumber,
+    mecanographicNumber: canViewAll && !collaboratorNumber ? undefined : targetNumber,
   });
 
   return res.json(tasks);
@@ -304,26 +305,26 @@ app.get('/api/tasks', authenticateToken, (req: AuthenticatedRequest, res: Respon
 app.get('/api/tasks/performance', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   const { date, collaboratorNumber } = req.query as { date?: string; collaboratorNumber?: string };
   const user = req.user!;
+  const canViewAll = user.role === 'ADMIN' || user.role === 'ADMIN_2';
   const effectiveDate = date || getLisbonDateTimeParts().dateStr;
 
-  if (user.role !== 'ADMIN' && date && !storage.isDateVisibleForCollaborator(date)) {
+  if (!canViewAll && date && !storage.isDateVisibleForCollaborator(date)) {
     return res.status(403).json({
       error: 'Acesso restrito: colaboradores apenas podem consultar a semana a decorrer (e a anterior nas primeiras 3 horas da nova semana).',
     });
   }
 
-  const targetNumber =
-    user.role === 'ADMIN'
-      ? (collaboratorNumber && collaboratorNumber !== 'TODOS' ? collaboratorNumber : undefined)
-      : user.mecanographicNumber;
+  const targetNumber = canViewAll
+    ? (collaboratorNumber && collaboratorNumber !== 'TODOS' ? collaboratorNumber : undefined)
+    : user.mecanographicNumber;
 
   const perf = storage.getTaskPerformance(effectiveDate, targetNumber);
   return res.json(perf);
 });
 
 app.post('/api/tasks/additional', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
-  const { collaboratorNumber, date, description, time } = req.body;
-  const result = storage.addAdditionalTask(collaboratorNumber, date, description, time, req.user!);
+  const { collaboratorNumber, date, description, time, ipaPoints } = req.body;
+  const result = storage.addAdditionalTask(collaboratorNumber, date, description, time, req.user!, ipaPoints);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
@@ -344,8 +345,8 @@ app.patch('/api/tasks/:id/status', authenticateToken, (req: AuthenticatedRequest
 });
 
 app.patch('/api/tasks/:id', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
-  const { description, time } = req.body;
-  const result = storage.updateTaskDetails(req.params.id, { description, time }, req.user!);
+  const { description, time, ipaPoints } = req.body;
+  const result = storage.updateTaskDetails(req.params.id, { description, time, ipaPoints }, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
@@ -387,11 +388,12 @@ app.get('/api/meals', authenticateToken, (req: AuthenticatedRequest, res: Respon
   }
 
   const user = req.user!;
-  if (user.role !== 'ADMIN' && !storage.isDateVisibleForCollaborator(date)) {
+  const canViewAll = user.role === 'ADMIN' || user.role === 'ADMIN_2';
+  if (!canViewAll && !storage.isDateVisibleForCollaborator(date)) {
     return res.status(403).json({ error: 'Data fora da janela semanal visível para colaboradores.' });
   }
 
-  const targetNumber = user.role === 'ADMIN' && collaboratorNumber ? collaboratorNumber : user.mecanographicNumber;
+  const targetNumber = canViewAll && collaboratorNumber ? collaboratorNumber : user.mecanographicNumber;
 
   const meal = storage.getMealSchedule(date, targetNumber);
   return res.json(meal || null);
@@ -405,11 +407,12 @@ app.get('/api/shifts/status', authenticateToken, (req: AuthenticatedRequest, res
   }
 
   const user = req.user!;
-  if (user.role !== 'ADMIN' && !storage.isDateVisibleForCollaborator(date)) {
+  const canViewAll = user.role === 'ADMIN' || user.role === 'ADMIN_2';
+  if (!canViewAll && !storage.isDateVisibleForCollaborator(date)) {
     return res.status(403).json({ error: 'Data fora da janela semanal visível para colaboradores.' });
   }
 
-  const targetNumber = user.role === 'ADMIN' && collaboratorNumber ? collaboratorNumber : user.mecanographicNumber;
+  const targetNumber = canViewAll && collaboratorNumber ? collaboratorNumber : user.mecanographicNumber;
 
   const statusInfo = storage.getShiftStatus(date, targetNumber);
   return res.json(statusInfo);
@@ -421,7 +424,8 @@ app.get('/api/shifts/all', authenticateToken, (req: AuthenticatedRequest, res: R
     return res.status(400).json({ error: 'Data obrigatória.' });
   }
 
-  if (req.user!.role !== 'ADMIN' && !storage.isDateVisibleForCollaborator(date)) {
+  const canViewAll = req.user!.role === 'ADMIN' || req.user!.role === 'ADMIN_2';
+  if (!canViewAll && !storage.isDateVisibleForCollaborator(date)) {
     return res.status(403).json({ error: 'Data fora da janela semanal visível para colaboradores.' });
   }
 
@@ -481,8 +485,8 @@ app.patch('/api/stocks/:id', authenticateToken, (req: AuthenticatedRequest, res:
   return res.json(result.record);
 });
 
-// 7. Relatório diário (Acesso restrito a Administradores)
-app.get('/api/reports/daily', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+// 7. Relatório diário (Acesso restrito a Administradores e Administrador 2)
+app.get('/api/reports/daily', authenticateToken, requireRole(['ADMIN', 'ADMIN_2']), (req: AuthenticatedRequest, res: Response) => {
   const { date, articleQuery, type, status, period, reportScope } = req.query as {
     date?: string;
     articleQuery?: string;
@@ -637,7 +641,7 @@ app.post('/api/pdes', authenticateToken, (req: AuthenticatedRequest, res: Respon
   return res.status(201).json(result.pde);
 });
 
-app.patch('/api/pdes/:id/status', authenticateToken, requireRole(['ADMIN', 'GESTOR_STOCKS_PDE']), (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/pdes/:id/status', authenticateToken, requireRole(['ADMIN', 'ADMIN_2', 'GESTOR_STOCKS_PDE']), (req: AuthenticatedRequest, res: Response) => {
   const { status, resolutionNotes } = req.body;
   if (!status || !['PENDENTE', 'RESOLVIDO', 'NAO_CONSIDERADO'].includes(status)) {
     return res.status(400).json({ error: 'Estado de PDE inválido. Utilize RESOLVIDO ou NAO_CONSIDERADO.' });

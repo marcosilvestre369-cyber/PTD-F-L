@@ -461,6 +461,8 @@ export function exportDailyReportPdf(report: DailyReportSummary) {
       const periodHeaderSuffix = period === 'MES' ? 'Mês' : period === 'ANO' ? 'Ano' : 'Dia';
       const colabRows = report.collaboratorTasks.map(c => {
         const eligible = c.annualScore?.eligible;
+        const rawTotal = c.annualScore?.totalPoints ?? 0;
+        const formattedIpa = (Object.is(rawTotal, -0) ? 0 : rawTotal).toFixed(1).replace('.', ',');
         return [
           c.mecanographicNumber,
           c.name,
@@ -470,7 +472,7 @@ export function exportDailyReportPdf(report: DailyReportSummary) {
           `${c.pendingTasks}`,
           `${c.completionRate}%`,
           `${c.weeklyCompletionRate ?? 0}%`,
-          eligible ? `${c.annualScore?.totalPoints ?? 0}` : 'Isento',
+          eligible ? formattedIpa : 'Isento',
         ];
       });
 

@@ -162,6 +162,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
     if (c.role === targetRole) return;
     const roleLabels: Record<Role, string> = {
       ADMIN: 'Administrador (Gestão Global)',
+      ADMIN_2: 'Administrador 2 (Sem Administração nem Atribuir Tarefas)',
       GESTOR_STOCKS_PDE: 'Gestor Stocks & PDE (Exclusivo Stocks e PDE)',
       COLABORADOR: 'Colaborador (Tarefas, Stocks e PDE)',
     };
@@ -661,6 +662,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
                 >
                   <option value="COLABORADOR">Colaborador (Tarefas, Stocks e PDE)</option>
                   <option value="GESTOR_STOCKS_PDE">Gestor Stocks & PDE (Exclusivo Stocks e PDE com decisão)</option>
+                  <option value="ADMIN_2">Administrador 2 (Todas as abas exceto Administração, sem atribuir tarefas)</option>
                   <option value="ADMIN">Administrador (Gestão Global)</option>
                 </select>
               </div>
@@ -716,18 +718,20 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
                         <td className="py-2.5 px-3.5">
                           <span
                             className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                              c.role === 'ADMIN'
+                              c.role === 'ADMIN' || c.role === 'ADMIN_2'
                                 ? 'bg-amber-tint text-amber-ink border-amber-border'
                                 : c.role === 'GESTOR_STOCKS_PDE'
                                 ? 'bg-surface-container text-on-surface border-line'
                                 : 'bg-surface-container text-on-surface-muted border-line'
                             }`}
                           >
-                            {c.role === 'ADMIN' && <Shield className="w-3 h-3 text-amber-ink" />}
+                            {(c.role === 'ADMIN' || c.role === 'ADMIN_2') && <Shield className="w-3 h-3 text-amber-ink" />}
                             {c.role === 'GESTOR_STOCKS_PDE' && <Package className="w-3 h-3 text-amber-ink" />}
                             <span>
                               {c.role === 'ADMIN'
                                 ? 'ADMINISTRADOR'
+                                : c.role === 'ADMIN_2'
+                                ? 'ADMINISTRADOR 2'
                                 : c.role === 'GESTOR_STOCKS_PDE'
                                 ? 'GESTOR STOCKS & PDE'
                                 : 'COLABORADOR'}
@@ -755,6 +759,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
                             >
                               <option value="COLABORADOR">Colaborador</option>
                               <option value="GESTOR_STOCKS_PDE">Gestor Stocks & PDE</option>
+                              <option value="ADMIN_2">Administrador 2</option>
                               <option value="ADMIN">Administrador</option>
                             </select>
                           )}
@@ -1596,6 +1601,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
                   >
                     <option value="COLABORADOR">Colaborador</option>
                     <option value="GESTOR_STOCKS_PDE">Gestor Stocks & PDE</option>
+                    <option value="ADMIN_2">Administrador 2</option>
                     <option value="ADMIN">Administrador</option>
                   </select>
                 </div>

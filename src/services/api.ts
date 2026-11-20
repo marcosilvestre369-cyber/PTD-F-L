@@ -18,6 +18,7 @@ import {
   ReportPeriod,
   InAppNotification,
   TaskPerformanceResponse,
+  TaskIpaPoints,
 } from '../types/index.ts';
 
 const TOKEN_KEY = 'prp_app_session_token';
@@ -158,10 +159,16 @@ export const api = {
     return this.request<DailyTask[]>(`/api/tasks?${params.toString()}`);
   },
 
-  async addAdditionalTask(collaboratorNumber: string, date: string, description: string, time?: string) {
+  async addAdditionalTask(
+    collaboratorNumber: string,
+    date: string,
+    description: string,
+    time?: string,
+    ipaPoints?: TaskIpaPoints
+  ) {
     return this.request<DailyTask>('/api/tasks/additional', {
       method: 'POST',
-      body: JSON.stringify({ collaboratorNumber, date, description, time }),
+      body: JSON.stringify({ collaboratorNumber, date, description, time, ipaPoints }),
     });
   },
 
@@ -172,10 +179,10 @@ export const api = {
     });
   },
 
-  async updateTaskDetails(taskId: string, description: string, time?: string) {
+  async updateTaskDetails(taskId: string, description: string, time?: string, ipaPoints?: TaskIpaPoints) {
     return this.request<DailyTask>(`/api/tasks/${taskId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ description, time }),
+      body: JSON.stringify({ description, time, ipaPoints }),
     });
   },
 

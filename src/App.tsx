@@ -131,8 +131,11 @@ export default function App() {
       if (tab !== 'stocks' && tab !== 'pde') {
         return;
       }
-    } else if ((tab === 'admin' || tab === 'relatorio') && currentUser?.role !== 'ADMIN') {
-      // Apenas administradores podem aceder às abas de administração e relatórios
+    } else if (tab === 'admin' && currentUser?.role !== 'ADMIN') {
+      // Apenas Administrador principal pode aceder à aba de administração
+      return;
+    } else if (tab === 'relatorio' && currentUser?.role !== 'ADMIN' && currentUser?.role !== 'ADMIN_2') {
+      // Apenas Administrador e Administrador 2 podem aceder à aba de relatórios
       return;
     }
     setActiveTab(tab);
@@ -144,7 +147,9 @@ export default function App() {
       if (activeTab !== 'stocks' && activeTab !== 'pde') {
         setActiveTab('stocks');
       }
-    } else if ((activeTab === 'admin' || activeTab === 'relatorio') && currentUser?.role !== 'ADMIN') {
+    } else if (activeTab === 'admin' && currentUser?.role !== 'ADMIN') {
+      setActiveTab('tarefas');
+    } else if (activeTab === 'relatorio' && currentUser?.role !== 'ADMIN' && currentUser?.role !== 'ADMIN_2') {
       setActiveTab('tarefas');
     }
   }, [currentUser, activeTab]);
@@ -193,7 +198,7 @@ export default function App() {
           <PdeView currentUser={currentUser} selectedDate={selectedDate} />
         )}
 
-        {activeTab === 'relatorio' && (
+        {activeTab === 'relatorio' && (currentUser.role === 'ADMIN' || currentUser.role === 'ADMIN_2') && (
           <DailyReportView currentUser={currentUser} selectedDate={selectedDate} />
         )}
 
@@ -219,6 +224,11 @@ export default function App() {
             {currentUser.role === 'ADMIN' && (
               <span className="px-1.5 py-0.5 bg-amber-tint text-amber-ink border border-amber-border rounded font-bold text-[10px]">
                 ADMIN
+              </span>
+            )}
+            {currentUser.role === 'ADMIN_2' && (
+              <span className="px-1.5 py-0.5 bg-amber-tint text-amber-ink border border-amber-border rounded font-bold text-[10px]">
+                ADMIN 2
               </span>
             )}
             {currentUser.role === 'GESTOR_STOCKS_PDE' && (

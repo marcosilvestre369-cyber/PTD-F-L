@@ -781,10 +781,10 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
 
               <div className="bg-surface-container border border-line rounded-xl px-3 py-2 text-[11px] text-on-surface-muted flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  <strong className="text-on-surface">IPA ({effectiveDate.slice(0, 4)}):</strong> Tarefas (+5 concluída, -2 não feita, -3 por assinalar após domingo) · Dia 100% (+8) · Semana &gt;90% (+5 após domingo) · Stocks Excesso/Rotura (+1 registo, +6 tratado) · PDE (+4 registo, +9 resolvido)
+                  <strong className="text-on-surface">IPA ({effectiveDate.slice(0, 4)}):</strong> Tabela IPA por tarefa (CSV) · Tarefas atribuídas (-1,0 a +1,0) · Dia 100% (+0,1) · Semana &gt;95% (+0,3 após domingo) · Stocks Excesso/Rotura (+0,1 registo, +0,4 tratado) · PDE (+0,3 registo, +0,7 resolvido)
                 </span>
                 <span className="text-on-surface-subtle font-medium">
-                  Administradores e Gestores de Stocks & PDE não estão sujeitos a IPA · Reinicia anualmente
+                  Administradores, Administrador 2 e Gestores de Stocks &amp; PDE não estão sujeitos a IPA · Reinicia anualmente
                 </span>
               </div>
 
@@ -884,7 +884,7 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
                               {c.annualScore?.eligible ? (
                                 <td className="py-2.5 px-3.5 text-right font-mono tabular-nums font-black text-amber-ink whitespace-nowrap">
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-amber-tint border border-amber-border">
-                                    {c.annualScore.totalPoints}
+                                    {(Object.is(c.annualScore.totalPoints, -0) ? 0 : c.annualScore.totalPoints).toFixed(1).replace('.', ',')}
                                   </span>
                                 </td>
                               ) : (

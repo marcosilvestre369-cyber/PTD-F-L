@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'COLABORADOR' | 'GESTOR_STOCKS_PDE';
+export type Role = 'ADMIN' | 'ADMIN_2' | 'COLABORADOR' | 'GESTOR_STOCKS_PDE';
 
 export type CollaboratorStatus = 'PENDENTE_ATIVACAO' | 'ATIVO' | 'DESATIVADO';
 
@@ -27,6 +27,12 @@ export interface TaskHistoryEntry {
   answeredBy: string;
 }
 
+export interface TaskIpaPoints {
+  pending: number; // POR_ASSINALAR (-1.0 a 1.0, passo 0.1)
+  done: number; // FEITA (-1.0 a 1.0, passo 0.1)
+  notDone: number; // NAO_FEITA (-1.0 a 1.0, passo 0.1)
+}
+
 export interface DailyTask {
   id: string;
   collaboratorId: string;
@@ -37,6 +43,7 @@ export interface DailyTask {
   type: TaskType;
   source: TaskSource;
   time?: string; // Horário facultativo da fonte (ex: "07:50", "12:00")
+  ipaPoints?: TaskIpaPoints; // Pontos IPA atribuídos pelo administrador (-1 a 1, passo 0.1)
   importId?: string;
   status: TaskStatus;
   observation?: string;
@@ -194,8 +201,8 @@ export interface CollaboratorAnnualScore {
   taskPendingPoints: number;
   daily100Count: number;
   daily100Points: number;
-  weeklyOver90Count: number;
-  weeklyOver90Points: number;
+  weeklyOver95Count: number;
+  weeklyOver95Points: number;
   tasksNetPoints: number;
   stockAddedCount: number;
   stockAddedPoints: number;

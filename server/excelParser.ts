@@ -505,7 +505,7 @@ function parsePtdSheet(
           continue;
         }
 
-        if (colab.role !== 'ADMIN') {
+        if (colab.role !== 'ADMIN' && colab.role !== 'GESTOR_STOCKS_PDE') {
           if (!workingByDate.has(parsedDate)) workingByDate.set(parsedDate, new Set());
           workingByDate.get(parsedDate)!.add(colab.mecanographicNumber);
 
@@ -660,7 +660,7 @@ function parsePtdSheet(
           return;
         }
 
-        if (colab!.role !== 'ADMIN') {
+        if (colab!.role !== 'ADMIN' && colab!.role !== 'GESTOR_STOCKS_PDE') {
           if (!workingByDate.has(dc.date)) workingByDate.set(dc.date, new Set());
           workingByDate.get(dc.date)!.add(colab!.mecanographicNumber);
 
@@ -847,7 +847,7 @@ function parsePtsSheet(
           const normCell = normalizeText(cellVal);
           if (ABSENT_KEYWORDS.some(k => normCell.includes(k))) return;
 
-          if (colab.role !== 'ADMIN') {
+          if (colab.role !== 'ADMIN' && colab.role !== 'GESTOR_STOCKS_PDE') {
             const slug = normCell.replace(/[^A-Z0-9]/g, '-').toLowerCase();
             const taskId = `task-pts-${slug}-${colab.mecanographicNumber}-${dc.date}`;
             if (!createdIds.has(taskId)) {
@@ -996,7 +996,7 @@ function parsePtsSheet(
             return;
           }
 
-          if (colab.role !== 'ADMIN') {
+          if (colab.role !== 'ADMIN' && colab.role !== 'GESTOR_STOCKS_PDE') {
             const taskId = `task-pts-${taskSlugBase}-${colab.mecanographicNumber}-${dc.date}`;
             if (!createdIds.has(taskId)) {
               createdIds.add(taskId);

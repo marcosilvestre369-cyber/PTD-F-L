@@ -33,8 +33,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleTheme,
 }) => {
   const isAdmin = currentUser.role === 'ADMIN';
+  const isAdmin2 = currentUser.role === 'ADMIN_2';
+  const isAnyAdmin = isAdmin || isAdmin2;
   const isGestorStocksPde = currentUser.role === 'GESTOR_STOCKS_PDE';
-  const isManagerBell = isAdmin || isGestorStocksPde;
+  const isManagerBell = isAnyAdmin || isGestorStocksPde;
   const canViewTasks = currentUser.role !== 'GESTOR_STOCKS_PDE';
 
   // Notificações na App
@@ -95,7 +97,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     setToastNotif(null);
     setIsNotifOpen(false);
     onTabChange(getTargetTabForNotification(notif));
-    if (notif.date && (isAdmin || availableDates.some(d => d.date === notif.date))) {
+    if (notif.date && (isAnyAdmin || availableDates.some(d => d.date === notif.date))) {
       onDateChange(notif.date);
     }
   };
@@ -217,8 +219,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 PDE
               </button>
 
-              {/* Aba RELATÓRIOS: estritamente visível apenas para administradores */}
-              {isAdmin && (
+              {/* Aba RELATÓRIOS: visível para Administrador e Administrador 2 */}
+              {isAnyAdmin && (
                 <button
                   onClick={() => onTabChange('relatorio')}
                   className={`px-3 py-1.5 rounded-lg transition-all text-xs lg:text-sm font-bold uppercase tracking-wider cursor-pointer ${
@@ -284,7 +286,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {currentUser.name}
                   </span>
                   <span className="text-[11px] text-on-surface-muted font-mono">
-                    Nº {currentUser.mecanographicNumber} {isAdmin ? '· Admin' : isGestorStocksPde ? '· Gestor Stocks & PDE' : ''}
+                    Nº {currentUser.mecanographicNumber}{' '}
+                    {isAdmin ? '· Admin' : isAdmin2 ? '· Admin 2' : isGestorStocksPde ? '· Gestor Stocks & PDE' : ''}
                   </span>
                 </div>
               </div>
@@ -377,7 +380,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               PDE
             </button>
-            {isAdmin && (
+            {isAnyAdmin && (
               <button
                 onClick={() => onTabChange('relatorio')}
                 className={`px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer transition-colors ${

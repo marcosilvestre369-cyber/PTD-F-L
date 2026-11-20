@@ -10,6 +10,7 @@ import type {
   ImportRecord,
   AuditLog,
   TaskStatus,
+  TaskIpaPoints,
   DailyReportSummary,
   ShiftStatusInfo,
   PdeRequest,
@@ -22,6 +23,11 @@ import type {
   CollaboratorAnnualScore,
   TaskPerformanceResponse,
 } from '../src/types/index.ts';
+import {
+  resolveTaskIpaPoints,
+  roundIpa,
+  sanitizeTaskIpaPoints,
+} from './ipaRules.ts';
 import {
   INITIAL_COLLABORATORS,
   INITIAL_ARTICLES,
@@ -547,8 +553,8 @@ class StorageManager {
 
     let sorted = Array.from(datesSet).sort();
 
-    // Regra: apenas administradores consultam várias semanas; colaboradores veem apenas a semana em vigor (+ semana anterior nas 3h iniciais de segunda)
-    if (user && user.role !== 'ADMIN') {
+    // Regra: administradores (ADMIN / ADMIN_2) consultam várias semanas; colaboradores veem apenas a semana em vigor (+ semana anterior nas 3h iniciais de segunda)
+    if (user && user.role !== 'ADMIN' && user.role !== 'ADMIN_2') {
       sorted = sorted.filter(d => this.isDateVisibleForCollaborator(d));
     }
 
@@ -583,8 +589,10 @@ class StorageManager {
     const newTasks: DailyTask[] = [];
     const newMeals: MealSchedule[] = [];
 
-    // Colaboradores da secção (excluindo administradores)
-    const workers = this.store.collaborators.filter(c => c.role !== 'ADMIN' && c.status === 'ATIVO');
+    // Colaboradores da secção (excluindo administradores e gestores stocks & pde)
+    const workers = this.store.collaborators.filter(
+      c => c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
+    );
 
     nextWeekDates.forEach((date, dayIdx) => {
       workers.forEach((colab, cIdx) => {
@@ -838,7 +846,12 @@ class StorageManager {
     if (!nextName) {
       return { success: false, error: 'Nome do colaborador obrigatório.' };
     }
-    if (nextRole !== 'ADMIN' && nextRole !== 'COLABORADOR' && nextRole !== 'GESTOR_STOCKS_PDE') {
+    if (
+      nextRole !== 'ADMIN' &&
+      nextRole !== 'ADMIN_2' &&
+      nextRole !== 'COLABORADOR' &&
+      nextRole !== 'GESTOR_STOCKS_PDE'
+    ) {
       return { success: false, error: 'Perfil inválido.' };
     }
     if (nextStatus !== 'ATIVO' && nextStatus !== 'DESATIVADO') {
@@ -1052,11 +1065,17 @@ class StorageManager {
     syncDocument('collaborators', target.id, target);
   }
 
+  private isExcludedFromTasks(mecanographicNumber: string): boolean {
+    if (mecanographicNumber === '56359') return true;
+    const colab = this.store.collaborators.find(c => c.mecanographicNumber === mecanographicNumber);
+    return Boolean(colab && (colab.role === 'ADMIN' || colab.role === 'GESTOR_STOCKS_PDE'));
+  }
+
   // --- Tarefas diárias ---
   public getTasks(filter: { date?: string; collaboratorId?: string; mecanographicNumber?: string }): DailyTask[] {
     return this.store.tasks.filter(t => {
-      // Ignorar tarefas de administradores
-      if (t.mecanographicNumber === '56359') return false;
+      // Ignorar tarefas de administradores e gestores de stocks & pde
+      if (this.isExcludedFromTasks(t.mecanographicNumber)) return false;
       if (filter.date && t.date !== filter.date) return false;
       if (filter.collaboratorId && t.collaboratorId !== filter.collaboratorId) return false;
       if (filter.mecanographicNumber && t.mecanographicNumber !== filter.mecanographicNumber) return false;
@@ -1069,12 +1088,24 @@ class StorageManager {
     date: string,
     description: string,
     time: string | undefined,
-    author: Collaborator
+    author: Collaborator,
+    ipaPoints?: TaskIpaPoints
   ): { success: boolean; error?: string; task?: DailyTask } {
     const colab = this.getCollaboratorByNumber(collaboratorNumber);
     if (!colab) return { success: false, error: 'Colaborador não encontrado.' };
+    if (colab.role === 'ADMIN' || colab.role === 'GESTOR_STOCKS_PDE') {
+      return {
+        success: false,
+        error: 'Não é permitido atribuir tarefas a perfis de Administrador ou Gestor Stocks & PDE.',
+      };
+    }
     if (!description.trim()) return { success: false, error: 'Descrição da tarefa obrigatória.' };
     if (!date) return { success: false, error: 'Data obrigatória.' };
+
+    const sanitizedIpa = sanitizeTaskIpaPoints(ipaPoints);
+    if (!sanitizedIpa.valid) {
+      return { success: false, error: sanitizedIpa.error };
+    }
 
     const newTask: DailyTask = {
       id: `task-add-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -1086,12 +1117,23 @@ class StorageManager {
       type: 'ADICIONAL',
       source: 'ADMINISTRADOR',
       time: time?.trim() || undefined,
+      ipaPoints: sanitizedIpa.value,
       status: 'POR_ASSINALAR',
       history: [],
     };
 
+    const ipaAuditSuffix = sanitizedIpa.value
+      ? ` [IPA: Por assinalar ${sanitizedIpa.value.pending}, Feita ${sanitizedIpa.value.done}, Não feita ${sanitizedIpa.value.notDone}]`
+      : '';
+
     this.store.tasks.push(newTask);
-    this.logAudit(author.mecanographicNumber, author.name, 'CRIAR_TAREFA_ADICIONAL', 'Tarefa', `Atribuída a ${colab.name} em ${date}: ${description}`);
+    this.logAudit(
+      author.mecanographicNumber,
+      author.name,
+      'CRIAR_TAREFA_ADICIONAL',
+      'Tarefa',
+      `Atribuída a ${colab.name} em ${date}: ${description}${ipaAuditSuffix}`
+    );
     this.save();
     syncDocument('tasks', newTask.id, newTask);
 
@@ -1128,7 +1170,11 @@ class StorageManager {
     const task = this.store.tasks.find(t => t.id === taskId);
     if (!task) return { success: false, error: 'Tarefa não encontrada.' };
 
-    if (user.role !== 'ADMIN' && task.mecanographicNumber !== user.mecanographicNumber) {
+    if (
+      user.role !== 'ADMIN' &&
+      user.role !== 'ADMIN_2' &&
+      task.mecanographicNumber !== user.mecanographicNumber
+    ) {
       return { success: false, error: 'Sem permissão para alterar tarefas de outro colaborador.' };
     }
 
@@ -1155,7 +1201,7 @@ class StorageManager {
 
   public updateTaskDetails(
     taskId: string,
-    data: { description?: string; time?: string },
+    data: { description?: string; time?: string; ipaPoints?: TaskIpaPoints },
     user: Collaborator
   ): { success: boolean; error?: string; task?: DailyTask } {
     const task = this.store.tasks.find(t => t.id === taskId);
@@ -1163,6 +1209,14 @@ class StorageManager {
 
     if (user.role !== 'ADMIN') {
       return { success: false, error: 'Apenas administradores podem editar tarefas.' };
+    }
+
+    if (data.ipaPoints !== undefined) {
+      const sanitizedIpa = sanitizeTaskIpaPoints(data.ipaPoints);
+      if (!sanitizedIpa.valid) {
+        return { success: false, error: sanitizedIpa.error };
+      }
+      task.ipaPoints = sanitizedIpa.value;
     }
 
     if (data.description !== undefined && data.description.trim()) {
@@ -1280,7 +1334,9 @@ class StorageManager {
   }
 
   public getAllShiftsForDate(date: string): ShiftStatusInfo[] {
-    const workers = this.store.collaborators.filter(c => c.status === 'ATIVO' && c.role !== 'ADMIN');
+    const workers = this.store.collaborators.filter(
+      c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE'
+    );
     return workers.map(w => this.getShiftStatus(date, w.mecanographicNumber));
   }
 
@@ -1469,11 +1525,11 @@ class StorageManager {
       `Registo de ${newRecord.type} para [${newRecord.articleSku}] ${newRecord.articleDescription}`
     );
 
-    // Notificar Administradores e Gestores de Stocks & PDE sobre o novo registo de stock
+    // Notificar Administradores (Admin / Admin 2) e Gestores de Stocks & PDE sobre o novo registo de stock
     const recipients = this.store.collaborators.filter(
       c =>
         c.status === 'ATIVO' &&
-        (c.role === 'ADMIN' || c.role === 'GESTOR_STOCKS_PDE') &&
+        (c.role === 'ADMIN' || c.role === 'ADMIN_2' || c.role === 'GESTOR_STOCKS_PDE') &&
         c.mecanographicNumber !== author.mecanographicNumber
     );
     const createdNotifications: InAppNotification[] = [];
@@ -1523,7 +1579,8 @@ class StorageManager {
     if (!record) return { success: false, error: 'Registo de stock não encontrado.' };
 
     const isOwner = record.authorNumber === user.mecanographicNumber;
-    const canManage = user.role === 'ADMIN' || user.role === 'GESTOR_STOCKS_PDE';
+    const canManage =
+      user.role === 'ADMIN' || user.role === 'ADMIN_2' || user.role === 'GESTOR_STOCKS_PDE';
 
     if (!isOwner && !canManage) {
       return { success: false, error: 'Apenas tem permissão para editar os seus próprios registos de stock.' };
@@ -1539,13 +1596,13 @@ class StorageManager {
       const matchedManager = this.store.collaborators.find(
         c =>
           c.status === 'ATIVO' &&
-          (c.role === 'ADMIN' || c.role === 'GESTOR_STOCKS_PDE') &&
+          (c.role === 'ADMIN' || c.role === 'ADMIN_2' || c.role === 'GESTOR_STOCKS_PDE') &&
           (c.name.toLowerCase() === candidate.toLowerCase() || c.mecanographicNumber === candidate)
       );
       if (!matchedManager) {
         return {
           success: false,
-          error: 'O responsável atribuído tem de ser um Administrador ou Gestor de Stocks & PDE ativo.',
+          error: 'O responsável atribuído tem de ser um Administrador, Administrador 2 ou Gestor de Stocks & PDE ativo.',
         };
       }
       validatedAssignedTo = matchedManager.name;
@@ -1737,8 +1794,12 @@ class StorageManager {
     }
     const weekBounds = getWeekBoundsFromDate(weekRefDate, Number(reportYear) || lisbonNow.year);
 
-    const periodTasks = (this.store.tasks || []).filter(t => matchesPeriod(t.date));
-    const activeCollaborators = this.store.collaborators.filter(c => c.status === 'ATIVO');
+    const periodTasks = (this.store.tasks || []).filter(
+      t => matchesPeriod(t.date) && !this.isExcludedFromTasks(t.mecanographicNumber)
+    );
+    const activeCollaborators = this.store.collaborators.filter(
+      c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE'
+    );
 
     const colabMap = new Map<string, {
       mecanographicNumber: string;
@@ -1914,8 +1975,8 @@ class StorageManager {
 
     const addedTasks: DailyTask[] = [];
     for (const nt of newTasks) {
-      // Requisito: Administradores não estão presentes nas tarefas operacionais
-      if (nt.mecanographicNumber === '56359') continue;
+      // Requisito: Administradores e Gestores Stocks & PDE não estão presentes nas tarefas operacionais
+      if (this.isExcludedFromTasks(nt.mecanographicNumber)) continue;
       nt.importId = importRecord.id;
 
       const key = `${nt.mecanographicNumber}_${nt.date}_${nt.type}_${nt.description.trim().toLowerCase()}`;
@@ -1940,7 +2001,7 @@ class StorageManager {
       return true;
     });
     const validMeals = newMeals
-      .filter(m => m.mecanographicNumber !== '56359')
+      .filter(m => !this.isExcludedFromTasks(m.mecanographicNumber))
       .map(m => ({ ...m, importId: importRecord.id }));
     this.store.meals.push(...validMeals);
 
@@ -2094,10 +2155,14 @@ class StorageManager {
   // --- Estatísticas & Histórico da Secção (Persistência e Análise) ---
   public getStatistics(): DailyStatistic[] {
     const dates = this.getAvailableDates().map(d => d.date);
-    const activeWorkers = this.store.collaborators.filter(c => c.status === 'ATIVO' && c.role !== 'ADMIN').length;
+    const activeWorkers = this.store.collaborators.filter(
+      c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE'
+    ).length;
 
     return dates.map(date => {
-      const dayTasks = this.store.tasks.filter(t => t.date === date);
+      const dayTasks = this.store.tasks.filter(
+        t => t.date === date && !this.isExcludedFromTasks(t.mecanographicNumber)
+      );
       const totalTasks = dayTasks.length;
       const completedTasks = dayTasks.filter(t => t.status === 'FEITA').length;
       const notDoneTasks = dayTasks.filter(t => t.status === 'NAO_FEITA').length;
@@ -2252,11 +2317,11 @@ class StorageManager {
       `Pedido de PDE de qualidade criado para ${article.sku} - ${article.description} (Lote: ${newPde.batchNumber}, Motivo: ${newPde.defectReason}) com ${newPde.photos.length} fotos`
     );
 
-    // Notificar Administradores e Gestores de Stocks & PDE sobre o novo pedido PDE
+    // Notificar Administradores (Admin / Admin 2) e Gestores de Stocks & PDE sobre o novo pedido PDE
     const pdeRecipients = this.store.collaborators.filter(
       c =>
         c.status === 'ATIVO' &&
-        (c.role === 'ADMIN' || c.role === 'GESTOR_STOCKS_PDE') &&
+        (c.role === 'ADMIN' || c.role === 'ADMIN_2' || c.role === 'GESTOR_STOCKS_PDE') &&
         c.mecanographicNumber !== user.mecanographicNumber
     );
     const pdeNotifications: InAppNotification[] = [];
@@ -2346,7 +2411,9 @@ class StorageManager {
     }
 
     const pde = this.store.pdes[index];
-    if (user.role !== 'ADMIN' && pde.submittedByNumber !== user.mecanographicNumber) {
+    const canManagePde =
+      user.role === 'ADMIN' || user.role === 'ADMIN_2' || user.role === 'GESTOR_STOCKS_PDE';
+    if (!canManagePde && pde.submittedByNumber !== user.mecanographicNumber) {
       return { success: false, error: 'Apenas tem permissão para apagar os pedidos de PDE submetidos por si.' };
     }
 
@@ -2448,7 +2515,7 @@ class StorageManager {
 
       const preparedTasks: DailyTask[] = [];
       for (const nt of tasks) {
-        if (nt.mecanographicNumber === '56359') continue;
+        if (this.isExcludedFromTasks(nt.mecanographicNumber)) continue;
         nt.importId = importRecord.id;
         const key = `${nt.mecanographicNumber}_${nt.date}_${nt.type}_${nt.description.trim().toLowerCase()}`;
         const prev = existingTasksMap.get(key);
@@ -2466,7 +2533,7 @@ class StorageManager {
       // Substituir horários de refeição da mesma fonte nas datas importadas ou de versões substituídas
       const removedMealIds: string[] = [];
       const validMeals = meals
-        .filter(m => m.mecanographicNumber !== '56359')
+        .filter(m => !this.isExcludedFromTasks(m.mecanographicNumber))
         .map(m => ({ ...m, importId: importRecord.id }));
       if (importRecord.sourceType === 'PTD' || validMeals.length > 0) {
         this.store.meals = this.store.meals.filter(m => {
@@ -2516,7 +2583,8 @@ class StorageManager {
   // --- Notificações na App ---
   public getNotifications(recipientNumber: string): InAppNotification[] {
     const user = this.getCollaboratorByNumber(recipientNumber);
-    const isAdminOrGestor = user?.role === 'ADMIN' || user?.role === 'GESTOR_STOCKS_PDE';
+    const isAdminOrGestor =
+      user?.role === 'ADMIN' || user?.role === 'ADMIN_2' || user?.role === 'GESTOR_STOCKS_PDE';
 
     return (this.store.notifications || [])
       .filter(n => {
@@ -2561,7 +2629,7 @@ class StorageManager {
     mecanographicNumber?: string
   ): WeeklyTaskCompletion {
     const weekTasks = (this.store.tasks || []).filter(t => {
-      if (t.mecanographicNumber === '56359') return false;
+      if (this.isExcludedFromTasks(t.mecanographicNumber)) return false;
       if (mecanographicNumber && t.mecanographicNumber !== mecanographicNumber) return false;
       return t.date >= weekStart && t.date <= weekEnd;
     });
@@ -2601,8 +2669,8 @@ class StorageManager {
         taskPendingPoints: 0,
         daily100Count: 0,
         daily100Points: 0,
-        weeklyOver90Count: 0,
-        weeklyOver90Points: 0,
+        weeklyOver95Count: 0,
+        weeklyOver95Points: 0,
         tasksNetPoints: 0,
         stockAddedCount: 0,
         stockAddedPoints: 0,
@@ -2622,21 +2690,33 @@ class StorageManager {
     const numericYear = parseInt(year, 10) || undefined;
     const todayLisbonStr = getLisbonDateTimeParts().dateStr;
 
-    // 1. Tarefas do ano (reset anual automático no final de cada ano por prefixo YYYY-)
+    // 4.1: Tarefas do ano (reset anual automático no final de cada ano por prefixo YYYY-)
     const yearTasks = (this.store.tasks || []).filter(
       t => t.mecanographicNumber === mecanographicNumber && t.date.startsWith(yearPrefix)
     );
     const taskTotalCount = yearTasks.length;
-    const taskCompletedCount = yearTasks.filter(t => t.status === 'FEITA').length;
-    const taskNotDoneCount = yearTasks.filter(t => t.status === 'NAO_FEITA').length;
+    let taskCompletedCount = 0;
+    let taskNotDoneCount = 0;
+    let taskCompletedPointsRaw = 0;
+    let taskNotDonePointsRaw = 0;
+
+    // 4.2: Pontos por tarefa e estado conforme Tabela IPA CSV (ou pontos personalizados definidos pelo admin)
+    for (const t of yearTasks) {
+      const pts = resolveTaskIpaPoints(t);
+      if (t.status === 'FEITA') {
+        taskCompletedCount += 1;
+        taskCompletedPointsRaw += pts.done;
+      } else if (t.status === 'NAO_FEITA') {
+        taskNotDoneCount += 1;
+        taskNotDonePointsRaw += pts.notDone;
+      }
+    }
+
     const taskCompletionRate = taskTotalCount > 0 ? Math.round((taskCompletedCount / taskTotalCount) * 100) : 0;
+    const taskCompletedPoints = roundIpa(taskCompletedPointsRaw);
+    const taskNotDonePoints = roundIpa(taskNotDonePointsRaw);
 
-    // Regra 2: +5 pontos por cada tarefa concluída
-    const taskCompletedPoints = taskCompletedCount * 5;
-    // Regra 3: -2 pontos por cada tarefa não feita
-    const taskNotDonePoints = taskNotDoneCount * -2;
-
-    // Regra 5: Se a taxa de cumprimento (dia) for de 100%, ganha +8 pontos por dia
+    // 4.3: Se a taxa de cumprimento (dia) for de 100%, ganha +0,1 pontos por dia
     const tasksByDay = new Map<string, DailyTask[]>();
     for (const t of yearTasks) {
       const list = tasksByDay.get(t.date) || [];
@@ -2649,11 +2729,11 @@ class StorageManager {
         daily100Count += 1;
       }
     }
-    const daily100Points = daily100Count * 8;
+    const daily100Points = roundIpa(daily100Count * 0.1);
 
-    // Regras 4 e 6 (avaliadas apenas após o último dia da semana):
-    // - Regra 4: -3 pontos por cada tarefa por assinalar (atribuído após o último dia da semana)
-    // - Regra 6: +5 pontos se a taxa de cumprimento semanal for > 90% (atribuído após o último dia da semana)
+    // Avaliações após o último dia da semana (Domingo terminado):
+    // - Tarefas por assinalar (pontos da Tabela IPA / personalizados)
+    // - 4.4: Taxa de cumprimento semanal superior a 95% -> +0,3 pontos
     const tasksByWeek = new Map<string, { weekEnd: string; tasks: DailyTask[] }>();
     for (const t of yearTasks) {
       const wb = getWeekBoundsFromDate(t.date, numericYear);
@@ -2665,30 +2745,36 @@ class StorageManager {
       }
     }
     let taskPendingCount = 0;
-    let weeklyOver90Count = 0;
+    let taskPendingPointsRaw = 0;
+    let weeklyOver95Count = 0;
     for (const { weekEnd, tasks: weekTasks } of tasksByWeek.values()) {
       // Só atribuído após o último dia da semana (Domingo) ter terminado
       if (todayLisbonStr <= weekEnd) continue;
       const total = weekTasks.length;
       if (total === 0) continue;
-      taskPendingCount += weekTasks.filter(t => t.status === 'POR_ASSINALAR').length;
+      for (const wt of weekTasks) {
+        if (wt.status === 'POR_ASSINALAR') {
+          taskPendingCount += 1;
+          taskPendingPointsRaw += resolveTaskIpaPoints(wt).pending;
+        }
+      }
       const completed = weekTasks.filter(t => t.status === 'FEITA').length;
-      const rate = Math.round((completed / total) * 100);
-      if (rate > 90) {
-        weeklyOver90Count += 1;
+      if (completed / total > 0.95) {
+        weeklyOver95Count += 1;
       }
     }
-    const taskPendingPoints = taskPendingCount * -3;
-    const weeklyOver90Points = weeklyOver90Count * 5;
+    const taskPendingPoints = roundIpa(taskPendingPointsRaw);
+    const weeklyOver95Points = roundIpa(weeklyOver95Count * 0.3);
 
-    const tasksNetPoints =
+    const tasksNetPoints = roundIpa(
       taskCompletedPoints +
-      taskNotDonePoints +
-      taskPendingPoints +
-      daily100Points +
-      weeklyOver90Points;
+        taskNotDonePoints +
+        taskPendingPoints +
+        daily100Points +
+        weeklyOver95Points
+    );
 
-    // 2. Regra 7: Excessos de stock ou roturas/revisões no ano (+1 ponto registo, +6 pontos tratado)
+    // 4.5: Excesso de stock ou rotura/revisão (+0,1 ponto registo, +0,4 pontos se tratado)
     const yearStocks = (this.store.stocks || []).filter(s => {
       if (s.type !== 'EXCESSO' && s.type !== 'ROTURA') return false;
       if (s.authorNumber !== mecanographicNumber) return false;
@@ -2696,27 +2782,26 @@ class StorageManager {
       return dateRef.startsWith(yearPrefix);
     });
     const stockAddedCount = yearStocks.length;
-    const stockAddedPoints = stockAddedCount * 1;
+    const stockAddedPoints = roundIpa(stockAddedCount * 0.1);
     const stockTreatedCount = yearStocks.filter(
       s => s.status === 'TRATADO' || (s.status as string) === 'RESOLVIDO'
     ).length;
-    const stockTreatedPoints = stockTreatedCount * 6;
-    const stockNetPoints = stockAddedPoints + stockTreatedPoints;
+    const stockTreatedPoints = roundIpa(stockTreatedCount * 0.4);
+    const stockNetPoints = roundIpa(stockAddedPoints + stockTreatedPoints);
 
-    // 3. Regra 8: Pedidos de PDE no ano (+4 pontos registo, +9 pontos resolvido)
+    // 4.6: Pedido de PDE (+0,3 pontos registo, +0,7 pontos se resolvido)
     const yearPdes = (this.store.pdes || []).filter(p => {
       if (p.submittedByNumber !== mecanographicNumber) return false;
       const dateRef = p.arrivalDate || p.submittedAt || '';
       return dateRef.startsWith(yearPrefix);
     });
     const pdeAddedCount = yearPdes.length;
-    const pdeAddedPoints = pdeAddedCount * 4;
+    const pdeAddedPoints = roundIpa(pdeAddedCount * 0.3);
     const pdeResolvedCount = yearPdes.filter(p => p.status === 'RESOLVIDO').length;
-    const pdeResolvedPoints = pdeResolvedCount * 9;
-    const pdeNetPoints = pdeAddedPoints + pdeResolvedPoints;
+    const pdeResolvedPoints = roundIpa(pdeResolvedCount * 0.7);
+    const pdeNetPoints = roundIpa(pdeAddedPoints + pdeResolvedPoints);
 
-    // Regra 9: Soma de todos os pontos ganhos e retirados
-    const totalPoints = tasksNetPoints + stockNetPoints + pdeNetPoints;
+    const totalPoints = roundIpa(tasksNetPoints + stockNetPoints + pdeNetPoints);
 
     return {
       year,
@@ -2731,8 +2816,8 @@ class StorageManager {
       taskPendingPoints,
       daily100Count,
       daily100Points,
-      weeklyOver90Count,
-      weeklyOver90Points,
+      weeklyOver95Count,
+      weeklyOver95Points,
       tasksNetPoints,
       stockAddedCount,
       stockAddedPoints,

@@ -38,7 +38,7 @@ const DEFECT_REASONS = [
 
 export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
   const isAdmin = currentUser.role === 'ADMIN';
-  const canDecide = isAdmin || currentUser.role === 'GESTOR_STOCKS_PDE';
+  const canDecide = isAdmin || currentUser.role === 'ADMIN_2' || currentUser.role === 'GESTOR_STOCKS_PDE';
 
   const [pdes, setPdes] = useState<PdeRequest[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);

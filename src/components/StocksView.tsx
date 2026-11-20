@@ -63,7 +63,7 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
   const [historyRecord, setHistoryRecord] = useState<StockRecord | null>(null);
 
   const isAdmin = currentUser.role === 'ADMIN';
-  const canManage = isAdmin || currentUser.role === 'GESTOR_STOCKS_PDE';
+  const canManage = isAdmin || currentUser.role === 'ADMIN_2' || currentUser.role === 'GESTOR_STOCKS_PDE';
 
   useEffect(() => {
     setRegistrationDate(selectedDate);
@@ -164,7 +164,7 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
   };
 
   const managerCollaborators = collaborators.filter(
-    c => c.status === 'ATIVO' && (c.role === 'ADMIN' || c.role === 'GESTOR_STOCKS_PDE')
+    c => c.status === 'ATIVO' && (c.role === 'ADMIN' || c.role === 'ADMIN_2' || c.role === 'GESTOR_STOCKS_PDE')
   );
 
   const formatStockStatus = (status: string) => {
@@ -879,7 +879,7 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
                       <option value="" disabled>Selecione Administrador ou Gestor Stocks & PDE...</option>
                       {managerCollaborators.map(c => (
                         <option key={c.id} value={c.name}>
-                          {c.name} ({c.mecanographicNumber}) — {c.role === 'ADMIN' ? 'Admin' : 'Gestor Stocks & PDE'}
+                          {c.name} ({c.mecanographicNumber}) — {c.role === 'ADMIN' ? 'Admin' : c.role === 'ADMIN_2' ? 'Admin 2' : 'Gestor Stocks & PDE'}
                         </option>
                       ))}
                     </select>

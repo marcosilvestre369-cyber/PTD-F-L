@@ -27,8 +27,27 @@ interface TasksViewProps {
   selectedDate: string;
 }
 
+const IPA_POINT_OPTIONS: number[] = Array.from(
+  { length: 21 },
+  (_, i) => Math.round((-1 + i * 0.1) * 10) / 10
+);
+
+function formatIpaOption(val: number): string {
+  const normalized = Object.is(val, -0) ? 0 : val;
+  const formatted = normalized.toFixed(1).replace('.', ',');
+  return normalized > 0 ? `+${formatted}` : formatted;
+}
+
+function formatIpaNumber(val: number): string {
+  const normalized = Object.is(val, -0) ? 0 : val;
+  return normalized.toFixed(1).replace('.', ',');
+}
+
 export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate }) => {
   const isAdmin = currentUser.role === 'ADMIN';
+  const canViewAll = isAdmin || currentUser.role === 'ADMIN_2';
+  const canAssignTasks = isAdmin;
+  const canEditTasks = isAdmin;
 
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [meal, setMeal] = useState<MealSchedule | null>(null);
@@ -36,9 +55,9 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   const [allShifts, setAllShifts] = useState<ShiftStatusInfo[]>([]);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
 
-  // Para administradores: 'TODOS' ou o número mecanográfico do primeiro colaborador ativo
+  // Para administradores e Admin 2: 'TODOS' ou o número mecanográfico de um colaborador ativo
   const [selectedCollaboratorNumber, setSelectedCollaboratorNumber] = useState<string>(
-    isAdmin ? 'TODOS' : currentUser.mecanographicNumber
+    canViewAll ? 'TODOS' : currentUser.mecanographicNumber
   );
 
   const [isLoading, setIsLoading] = useState(true);
@@ -52,6 +71,9 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   const [addColabNumber, setAddColabNumber] = useState('');
   const [addDescription, setAddDescription] = useState('');
   const [addTime, setAddTime] = useState('');
+  const [addIpaPending, setAddIpaPending] = useState<number>(-0.3);
+  const [addIpaDone, setAddIpaDone] = useState<number>(0.3);
+  const [addIpaNotDone, setAddIpaNotDone] = useState<number>(-0.2);
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -67,6 +89,10 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   const [editingTask, setEditingTask] = useState<DailyTask | null>(null);
   const [editDescription, setEditDescription] = useState('');
   const [editTime, setEditTime] = useState('');
+  const [editUseCustomIpa, setEditUseCustomIpa] = useState(false);
+  const [editIpaPending, setEditIpaPending] = useState<number>(-0.3);
+  const [editIpaDone, setEditIpaDone] = useState<number>(0.3);
+  const [editIpaNotDone, setEditIpaNotDone] = useState<number>(-0.2);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -75,16 +101,18 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Filtrar apenas colaboradores de secção (os administradores não estão presentes nas tarefas)
+  // Filtrar apenas colaboradores de secção (Administradores e Gestores Stocks & PDE estão excluídos da lista de tarefas)
   const workerCollaborators = collaborators.filter(
-    c => c.role !== 'ADMIN' && c.status === 'ATIVO'
+    c => c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
   );
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canViewAll) {
       api.getCollaborators()
         .then(list => {
-          const workers = list.filter(c => c.role !== 'ADMIN' && c.status === 'ATIVO');
+          const workers = list.filter(
+            c => c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
+          );
           setCollaborators(list);
           if (workers.length > 0 && !addColabNumber) {
             setAddColabNumber(workers[0].mecanographicNumber);
@@ -92,20 +120,20 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
         })
         .catch(console.error);
     }
-  }, [isAdmin]);
+  }, [canViewAll]);
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (!canViewAll) {
       setSelectedCollaboratorNumber(currentUser.mecanographicNumber);
     }
-  }, [currentUser, isAdmin]);
+  }, [currentUser, canViewAll]);
 
   const loadData = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const isViewingAll = isAdmin && selectedCollaboratorNumber === 'TODOS';
-      const targetColab = isViewingAll ? undefined : (isAdmin ? selectedCollaboratorNumber : currentUser.mecanographicNumber);
+      const isViewingAll = canViewAll && selectedCollaboratorNumber === 'TODOS';
+      const targetColab = isViewingAll ? undefined : (canViewAll ? selectedCollaboratorNumber : currentUser.mecanographicNumber);
 
       if (isViewingAll) {
         const [fetchedTasks, fetchedShifts, fetchedPerf] = await Promise.all([
@@ -160,9 +188,9 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
       const updated = await api.updateTaskStatus(taskId, status, observation);
       setTasks(prev => prev.map(t => (t.id === taskId ? updated : t)));
       const targetColab =
-        isAdmin && selectedCollaboratorNumber !== 'TODOS'
+        canViewAll && selectedCollaboratorNumber !== 'TODOS'
           ? selectedCollaboratorNumber
-          : isAdmin
+          : canViewAll
           ? undefined
           : currentUser.mecanographicNumber;
       api.getTaskPerformance(selectedDate, targetColab).then(setPerformance).catch(console.warn);
@@ -194,11 +222,19 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
         targetColab,
         selectedDate,
         addDescription.trim(),
-        addTime.trim() || undefined
+        addTime.trim() || undefined,
+        {
+          pending: addIpaPending,
+          done: addIpaDone,
+          notDone: addIpaNotDone,
+        }
       );
       setIsAddModalOpen(false);
       setAddDescription('');
       setAddTime('');
+      setAddIpaPending(-0.3);
+      setAddIpaDone(0.3);
+      setAddIpaNotDone(-0.2);
       await loadData();
     } catch (err: any) {
       setAddError(err.message || 'Erro ao criar tarefa adicional.');
@@ -211,6 +247,11 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
     setEditingTask(task);
     setEditDescription(task.description);
     setEditTime(task.time || '');
+    const hasCustomIpa = task.type === 'ADICIONAL' || Boolean(task.ipaPoints);
+    setEditUseCustomIpa(hasCustomIpa);
+    setEditIpaPending(task.ipaPoints?.pending ?? -0.3);
+    setEditIpaDone(task.ipaPoints?.done ?? 0.3);
+    setEditIpaNotDone(task.ipaPoints?.notDone ?? -0.2);
     setEditError(null);
   };
 
@@ -220,10 +261,18 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
     setEditLoading(true);
     setEditError(null);
     try {
+      const ipaPayload = editUseCustomIpa
+        ? {
+            pending: editIpaPending,
+            done: editIpaDone,
+            notDone: editIpaNotDone,
+          }
+        : undefined;
       const updated = await api.updateTaskDetails(
         editingTask.id,
         editDescription.trim(),
-        editTime.trim() || undefined
+        editTime.trim() || undefined,
+        ipaPayload
       );
       setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)));
       setEditingTask(null);
@@ -251,7 +300,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
     }
   };
 
-  const isAllView = isAdmin && selectedCollaboratorNumber === 'TODOS';
+  const isAllView = canViewAll && selectedCollaboratorNumber === 'TODOS';
 
   const principalTasks = tasks.filter(t => t.type === 'PRINCIPAL');
   const secundaryTasks = tasks.filter(t => t.type === 'SECUNDARIA');
@@ -264,8 +313,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   const renderTaskCard = (task: DailyTask) => {
     const isSaving = savingTaskId === task.id;
     const feedback = saveFeedback?.id === task.id ? saveFeedback : null;
-    const canAnswer = isAdmin || task.mecanographicNumber === currentUser.mecanographicNumber;
-    const canEdit = isAdmin; // Apenas administradores podem editar ou apagar tarefas
+    const canAnswer = canViewAll || task.mecanographicNumber === currentUser.mecanographicNumber;
+    const canEdit = canEditTasks; // Apenas Administrador principal pode editar ou apagar tarefas
 
     return (
       <div
@@ -308,6 +357,17 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
             </div>
 
             <p className="text-sm font-semibold text-on-surface">{task.description}</p>
+
+            {task.ipaPoints && (
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-on-surface-muted pt-0.5">
+                <span className="font-sans font-bold text-amber-ink">IPA:</span>
+                <span>Por assinalar {formatIpaOption(task.ipaPoints.pending)}</span>
+                <span className="text-line">·</span>
+                <span className="text-success-ink">Feita {formatIpaOption(task.ipaPoints.done)}</span>
+                <span className="text-line">·</span>
+                <span className="text-danger-ink">Não feita {formatIpaOption(task.ipaPoints.notDone)}</span>
+              </div>
+            )}
 
             {task.observation && (
               <div className="flex items-start gap-1.5 text-xs text-danger-ink bg-danger-tint p-2 rounded-xl border border-danger-border mt-1">
@@ -489,8 +549,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
         </div>
 
         <div className="w-full md:w-auto min-w-0 flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
-          {/* Seletor de Colaborador para Administradores (apenas trabalhadores de secção) */}
-          {isAdmin && (
+          {/* Seletor de Colaborador para Administrador e Administrador 2 (apenas trabalhadores de secção) */}
+          {canViewAll && (
             <div className="w-full sm:w-auto min-w-0 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 text-xs">
               <label htmlFor="admin-collab-select" className="font-bold text-on-surface-muted shrink-0">
                 Visualizar:
@@ -511,13 +571,17 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
             </div>
           )}
 
-          {/* Atribuir Tarefa (Apenas Administrador) */}
-          {isAdmin && (
+          {/* Atribuir Tarefa (Estritamente apenas Administrador principal) */}
+          {canAssignTasks && (
             <button
               onClick={() => {
                 if (!addColabNumber && workerCollaborators.length > 0) {
                   setAddColabNumber(workerCollaborators[0].mecanographicNumber);
                 }
+                setAddIpaPending(-0.3);
+                setAddIpaDone(0.3);
+                setAddIpaNotDone(-0.2);
+                setAddError(null);
                 setIsAddModalOpen(true);
               }}
               className="w-full sm:w-auto justify-center min-h-[42px] sm:min-h-0 flex items-center gap-1.5 px-3 py-2 sm:py-1.5 bg-primary hover:bg-primary-hover text-on-primary rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0 whitespace-nowrap"
@@ -692,10 +756,10 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
             </div>
           </div>
 
-          {/* IPA (apenas para COLABORADOR; Admins e Gestores estão isentos) */}
+          {/* IPA (apenas para COLABORADOR; Admins, Admin 2 e Gestores estão isentos) */}
           {performance.annualScore?.eligible && (
             <div
-              title={`IPA ${performance.annualScore.year}: Tarefas (${performance.annualScore.tasksNetPoints}) · Stocks (${performance.annualScore.stockNetPoints}) · PDE (${performance.annualScore.pdeNetPoints})`}
+              title={`IPA ${performance.annualScore.year}: Tarefas (${formatIpaNumber(performance.annualScore.tasksNetPoints)}) · Stocks (${formatIpaNumber(performance.annualScore.stockNetPoints)}) · PDE (${formatIpaNumber(performance.annualScore.pdeNetPoints)})`}
               className="col-span-4 min-w-0 bg-surface-container text-on-surface rounded-2xl border border-amber-border/70 p-3.5 sm:p-5 shadow-2xs flex flex-col justify-between gap-2.5 sm:gap-3"
             >
               <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-amber-ink leading-tight">
@@ -703,7 +767,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
               </span>
               <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0 flex-wrap">
                 <span className="text-xl sm:text-3xl font-bold font-mono tabular-nums tracking-tight text-on-surface leading-none">
-                  {performance.annualScore.totalPoints}
+                  {formatIpaNumber(performance.annualScore.totalPoints)}
                 </span>
               </div>
             </div>
@@ -1058,6 +1122,59 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
                 />
               </div>
 
+              <div className="p-3 bg-surface-container border border-line rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-on-surface uppercase tracking-wider text-[11px]">
+                    Escala IPA da Tarefa
+                  </span>
+                  <span className="text-[10px] font-mono text-on-surface-muted">-1,0 a +1,0 (passo 0,1)</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-amber-ink mb-1">Por Assinalar</label>
+                    <select
+                      value={addIpaPending}
+                      onChange={e => setAddIpaPending(Number(e.target.value))}
+                      className="w-full px-2 py-1.5 bg-surface-card border border-line rounded-lg font-mono font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-brand cursor-pointer"
+                    >
+                      {IPA_POINT_OPTIONS.map(opt => (
+                        <option key={`add-p-${opt}`} value={opt}>
+                          {formatIpaOption(opt)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-success-ink mb-1">Feita</label>
+                    <select
+                      value={addIpaDone}
+                      onChange={e => setAddIpaDone(Number(e.target.value))}
+                      className="w-full px-2 py-1.5 bg-surface-card border border-line rounded-lg font-mono font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-brand cursor-pointer"
+                    >
+                      {IPA_POINT_OPTIONS.map(opt => (
+                        <option key={`add-d-${opt}`} value={opt}>
+                          {formatIpaOption(opt)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-danger-ink mb-1">Não Feita</label>
+                    <select
+                      value={addIpaNotDone}
+                      onChange={e => setAddIpaNotDone(Number(e.target.value))}
+                      className="w-full px-2 py-1.5 bg-surface-card border border-line rounded-lg font-mono font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-brand cursor-pointer"
+                    >
+                      {IPA_POINT_OPTIONS.map(opt => (
+                        <option key={`add-n-${opt}`} value={opt}>
+                          {formatIpaOption(opt)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-line">
                 <button
                   type="button"
@@ -1128,6 +1245,68 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
                   onChange={e => setEditTime(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-container border border-line rounded-lg focus:bg-surface-card focus:outline-none focus:ring-2 focus:ring-amber-brand font-mono text-on-surface"
                 />
+              </div>
+
+              <div className="p-3 bg-surface-container border border-line rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="inline-flex items-center gap-2 font-bold text-on-surface text-[11px] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editUseCustomIpa}
+                      onChange={e => setEditUseCustomIpa(e.target.checked)}
+                      className="rounded accent-amber-brand cursor-pointer"
+                    />
+                    <span className="uppercase tracking-wider">Definir Pontos IPA (-1,0 a +1,0)</span>
+                  </label>
+                  <span className="text-[10px] font-mono text-on-surface-muted">passo 0,1</span>
+                </div>
+
+                {editUseCustomIpa && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-amber-ink mb-1">Por Assinalar</label>
+                      <select
+                        value={editIpaPending}
+                        onChange={e => setEditIpaPending(Number(e.target.value))}
+                        className="w-full px-2 py-1.5 bg-surface-card border border-line rounded-lg font-mono font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-brand cursor-pointer"
+                      >
+                        {IPA_POINT_OPTIONS.map(opt => (
+                          <option key={`edit-p-${opt}`} value={opt}>
+                            {formatIpaOption(opt)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-success-ink mb-1">Feita</label>
+                      <select
+                        value={editIpaDone}
+                        onChange={e => setEditIpaDone(Number(e.target.value))}
+                        className="w-full px-2 py-1.5 bg-surface-card border border-line rounded-lg font-mono font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-brand cursor-pointer"
+                      >
+                        {IPA_POINT_OPTIONS.map(opt => (
+                          <option key={`edit-d-${opt}`} value={opt}>
+                            {formatIpaOption(opt)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-danger-ink mb-1">Não Feita</label>
+                      <select
+                        value={editIpaNotDone}
+                        onChange={e => setEditIpaNotDone(Number(e.target.value))}
+                        className="w-full px-2 py-1.5 bg-surface-card border border-line rounded-lg font-mono font-bold text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-brand cursor-pointer"
+                      >
+                        {IPA_POINT_OPTIONS.map(opt => (
+                          <option key={`edit-n-${opt}`} value={opt}>
+                            {formatIpaOption(opt)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-line">
