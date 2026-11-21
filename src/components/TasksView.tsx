@@ -107,19 +107,24 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   );
 
   useEffect(() => {
-    if (canViewAll) {
-      api.getCollaborators()
-        .then(list => {
-          const workers = list.filter(
-            c => c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
-          );
-          setCollaborators(list);
-          if (workers.length > 0 && !addColabNumber) {
-            setAddColabNumber(workers[0].mecanographicNumber);
-          }
-        })
-        .catch(console.error);
-    }
+    if (!canViewAll) return;
+    const controller = new AbortController();
+    api.getCollaborators(controller.signal)
+      .then(list => {
+        const workers = list.filter(
+          c => c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
+        );
+        setCollaborators(list);
+        if (workers.length > 0 && !addColabNumber) {
+          setAddColabNumber(workers[0].mecanographicNumber);
+        }
+      })
+      .catch(err => {
+        if (!api.isAbortError(err)) {
+          console.error(err);
+        }
+      });
+    return () => controller.abort();
   }, [canViewAll]);
 
   useEffect(() => {
@@ -128,7 +133,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
     }
   }, [currentUser, canViewAll]);
 
-  const loadData = async () => {
+  const loadData = async (signal?: AbortSignal) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -137,9 +142,9 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
 
       if (isViewingAll) {
         const [fetchedTasks, fetchedShifts, fetchedPerf] = await Promise.all([
-          api.getTasks(selectedDate),
-          api.getAllShiftsForDate(selectedDate),
-          api.getTaskPerformance(selectedDate),
+          api.getTasks(selectedDate, undefined, signal),
+          api.getAllShiftsForDate(selectedDate, signal),
+          api.getTaskPerformance(selectedDate, undefined, signal),
         ]);
         setTasks(fetchedTasks);
         setAllShifts(fetchedShifts);
@@ -148,10 +153,10 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
         setPerformance(fetchedPerf);
       } else if (targetColab) {
         const [fetchedTasks, fetchedMeal, fetchedShift, fetchedPerf] = await Promise.all([
-          api.getTasks(selectedDate, targetColab),
-          api.getMeal(selectedDate, targetColab),
-          api.getShiftStatus(selectedDate, targetColab),
-          api.getTaskPerformance(selectedDate, targetColab),
+          api.getTasks(selectedDate, targetColab, signal),
+          api.getMeal(selectedDate, targetColab, signal),
+          api.getShiftStatus(selectedDate, targetColab, signal),
+          api.getTaskPerformance(selectedDate, targetColab, signal),
         ]);
         setTasks(fetchedTasks);
         setMeal(fetchedMeal);
@@ -160,14 +165,19 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
         setPerformance(fetchedPerf);
       }
     } catch (err: any) {
+      if (api.isAbortError(err)) return;
       setError(err.message || 'Erro ao carregar dados das tarefas.');
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadData();
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
   }, [selectedDate, selectedCollaboratorNumber]);
 
   const handleStatusClick = async (task: DailyTask, newStatus: TaskStatus) => {

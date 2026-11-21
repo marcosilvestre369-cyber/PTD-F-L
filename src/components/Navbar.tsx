@@ -44,35 +44,75 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [toastNotif, setToastNotif] = useState<InAppNotification | null>(null);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const previousNotifIdsRef = useRef<Set<string>>(new Set());
+  const isFetchingNotifsRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
+  const toastTimeoutRef = useRef<number | null>(null);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (force = false, signal?: AbortSignal) => {
+    if (typeof document !== 'undefined' && document.hidden && !force) return;
+    if (isFetchingNotifsRef.current) return;
+    const now = Date.now();
+    if (!force && now - lastFetchAtRef.current < 5000) return;
+
+    isFetchingNotifsRef.current = true;
     try {
-      const list = await api.getNotifications();
+      const list = await api.getNotifications(signal);
+      lastFetchAtRef.current = Date.now();
       // Detetar se há nova notificação que não existia previamente
       if (previousNotifIdsRef.current.size > 0) {
         const newlyAdded = list.find(n => !n.read && !previousNotifIdsRef.current.has(n.id));
         if (newlyAdded) {
           setToastNotif(newlyAdded);
-          setTimeout(() => setToastNotif(null), 8000);
+          if (toastTimeoutRef.current !== null) {
+            window.clearTimeout(toastTimeoutRef.current);
+          }
+          toastTimeoutRef.current = window.setTimeout(() => setToastNotif(null), 8000);
         }
       }
       previousNotifIdsRef.current = new Set(list.map(n => n.id));
       setNotifications(list);
     } catch (err) {
-      console.warn('Erro ao carregar notificações:', err);
+      if (!api.isAbortError(err)) {
+        console.warn('Erro ao carregar notificações:', err);
+      }
+    } finally {
+      isFetchingNotifsRef.current = false;
     }
   };
 
   useEffect(() => {
     previousNotifIdsRef.current = new Set();
+    lastFetchAtRef.current = 0;
     setIsNotifOpen(false);
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 12000); // Polling a cada 12 segundos
-    return () => clearInterval(interval);
+    const controller = new AbortController();
+    fetchNotifications(true, controller.signal);
+
+    // Polling moderado (30s) e pausado quando o separador está oculto
+    const interval = window.setInterval(() => {
+      if (!document.hidden) {
+        fetchNotifications(false);
+      }
+    }, 30000);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchNotifications(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (toastTimeoutRef.current !== null) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
   }, [currentUser.id]);
 
   useEffect(() => {
-    fetchNotifications();
+    fetchNotifications(false);
   }, [activeTab]);
 
   const unreadCount = notifications.filter(n => !n.read).length;

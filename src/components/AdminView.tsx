@@ -101,40 +101,48 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
   const [audits, setAudits] = useState<AuditLog[]>([]);
 
   useEffect(() => {
-    loadAll();
-    loadDbStatus();
-  }, [subTab]);
+    const controller = new AbortController();
+    api.getHistory(controller.signal)
+      .then(history => {
+        if (history?.databaseInfo) {
+          setDbInfo(history.databaseInfo);
+        }
+      })
+      .catch(err => {
+        if (!api.isAbortError(err)) {
+          console.error(err);
+        }
+      });
+    return () => controller.abort();
+  }, []);
 
-  const loadDbStatus = async () => {
-    try {
-      const history = await api.getHistory();
-      if (history?.databaseInfo) {
-        setDbInfo(history.databaseInfo);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const loadAll = async () => {
+  const loadAll = async (signal?: AbortSignal) => {
     try {
       if (subTab === 'colaboradores') {
-        const colabs = await api.getCollaborators();
+        const colabs = await api.getCollaborators(signal);
         setCollaborators(colabs);
       } else if (subTab === 'catalogo') {
-        const arts = await api.getArticles(false);
+        const arts = await api.getArticles(false, signal);
         setArticles(arts);
       } else if (subTab === 'importacao') {
-        const imps = await api.getImports();
+        const imps = await api.getImports(signal);
         setImports(imps);
       } else if (subTab === 'auditoria') {
-        const auds = await api.getAudits();
+        const auds = await api.getAudits(signal);
         setAudits(auds);
       }
     } catch (err: any) {
-      console.error(err);
+      if (!api.isAbortError(err)) {
+        console.error(err);
+      }
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadAll(controller.signal);
+    return () => controller.abort();
+  }, [subTab]);
 
   // --- Handlers de Colaborador ---
   const handleAddCollaborator = async (e: React.FormEvent) => {

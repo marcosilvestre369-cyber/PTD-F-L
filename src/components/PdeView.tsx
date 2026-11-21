@@ -81,28 +81,46 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Carregar catálogo de artigos apenas uma vez ao montar
   useEffect(() => {
-    loadData();
-  }, [statusFilter, myOnlyFilter]);
+    const controller = new AbortController();
+    api.getArticles(false, controller.signal)
+      .then(setArticles)
+      .catch(err => {
+        if (!api.isAbortError(err)) {
+          console.error('Erro ao carregar artigos:', err);
+        }
+      });
+    return () => controller.abort();
+  }, []);
 
-  const loadData = async () => {
+  const loadPdes = async (signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const [pdeList, articleList] = await Promise.all([
-        api.getPdes({
+      const pdeList = await api.getPdes(
+        {
           status: statusFilter !== 'TODOS' ? statusFilter : undefined,
           myOnly: myOnlyFilter,
-        }),
-        api.getArticles(),
-      ]);
+        },
+        signal
+      );
       setPdes(pdeList);
-      setArticles(articleList);
     } catch (err) {
-      console.error('Erro ao carregar PDEs:', err);
+      if (!api.isAbortError(err)) {
+        console.error('Erro ao carregar PDEs:', err);
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadPdes(controller.signal);
+    return () => controller.abort();
+  }, [statusFilter, myOnlyFilter]);
 
   // Filtragem de artigos para seleção no formulário
   const filteredArticles = articleSearch.trim()
@@ -207,7 +225,7 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
       setExpirationDate('');
       setNotes('');
       setPhotos([]);
-      await loadData();
+      await loadPdes();
     } catch (err: any) {
       setFormError(err.message || 'Erro ao submeter pedido de PDE.');
     } finally {
@@ -226,7 +244,7 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
       });
       setResolvingPde(null);
       setResolutionNotes('');
-      await loadData();
+      await loadPdes();
     } catch (err: any) {
       setResolveError(err.message || 'Erro ao atualizar estado do PDE.');
     } finally {
@@ -240,7 +258,7 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
     try {
       await api.deletePde(deleteTargetPde.id);
       setDeleteTargetPde(null);
-      await loadData();
+      await loadPdes();
     } catch (err: any) {
       setFormError(err.message || 'Erro ao apagar registo de PDE.');
     } finally {

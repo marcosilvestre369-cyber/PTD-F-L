@@ -55,8 +55,17 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
 
   // Filtros locais do relatório
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // Debounce da pesquisa para não sobrecarregar o endpoint pesado de relatórios
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
   // Sincronizar dayDate se selectedDate mudar
   useEffect(() => {
@@ -69,28 +78,37 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
   const effectiveDate =
     reportPeriod === 'DIA' ? dayDate : reportPeriod === 'MES' ? monthDate : yearDate;
 
-  const loadReport = async () => {
+  const loadReport = async (signal?: AbortSignal) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await api.getDailyReport(effectiveDate, {
-        period: reportPeriod,
-        reportScope,
-        articleQuery: searchQuery || undefined,
-        type: typeFilter || undefined,
-        status: statusFilter || undefined,
-      });
+      const data = await api.getDailyReport(
+        effectiveDate,
+        {
+          period: reportPeriod,
+          reportScope,
+          articleQuery: debouncedSearchQuery || undefined,
+          type: typeFilter || undefined,
+          status: statusFilter || undefined,
+        },
+        signal
+      );
       setReport(data);
     } catch (err: any) {
+      if (api.isAbortError(err)) return;
       setError(err.message || 'Erro ao carregar relatório operacional.');
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadReport();
-  }, [effectiveDate, reportPeriod, reportScope, searchQuery, typeFilter, statusFilter]);
+    const controller = new AbortController();
+    loadReport(controller.signal);
+    return () => controller.abort();
+  }, [effectiveDate, reportPeriod, reportScope, debouncedSearchQuery, typeFilter, statusFilter]);
 
   const handleExportPdf = () => {
     if (!report) return;

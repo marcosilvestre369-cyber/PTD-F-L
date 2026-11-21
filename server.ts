@@ -9,6 +9,16 @@ import { storage, getLisbonDateTimeParts } from './server/storage.ts';
 import { getFirebaseConfigInfo } from './server/firebaseSync.ts';
 import { parseScheduleFile } from './server/pdfParser.ts';
 import { parseScheduleWorkbook, generateScheduleTemplateBuffer, type ImportWorkbookScope } from './server/excelParser.ts';
+import {
+  runWithLimit,
+  createRequestAbortController,
+  getLimiterStats,
+  DEFAULT_TASK_TIMEOUT_MS,
+  HEAVY_TASK_TIMEOUT_MS,
+  TaskTimeoutError,
+  TaskQueueFullError,
+  TaskAbortedError,
+} from './server/taskLimiter.ts';
 import type { Collaborator, Role } from './src/types/index.ts';
 
 dotenv.config();
@@ -100,6 +110,36 @@ function requireRole(allowedRoles: Role[]) {
   };
 }
 
+function limited(
+  handler: (req: AuthenticatedRequest, res: Response) => unknown | Promise<unknown>,
+  options?: { timeoutMs?: number; label?: string }
+) {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const { signal, cleanup } = createRequestAbortController(req, res);
+    const label = options?.label || `${req.method} ${req.path}`;
+    const timeoutMs = options?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS;
+
+    try {
+      await runWithLimit(
+        async () => {
+          if (signal.aborted || res.writableEnded) {
+            return;
+          }
+          await handler(req, res);
+        },
+        { timeoutMs, label, signal }
+      );
+    } catch (error) {
+      if (error instanceof TaskAbortedError || res.headersSent || res.writableEnded) {
+        return;
+      }
+      next(error);
+    } finally {
+      cleanup();
+    }
+  };
+}
+
 // ---------------- API ROUTES ----------------
 
 // 0. Health Check (Hostinger / Cloud monitoring)
@@ -108,6 +148,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
   return res.json({
     status: 'ok',
     env: process.env.NODE_ENV || 'development',
+    concurrency: getLimiterStats(),
     database: {
       provider: 'Firebase Firestore',
       connected: fb.connected,
@@ -202,23 +243,23 @@ app.get('/api/auth/me', authenticateToken, (req: AuthenticatedRequest, res: Resp
 });
 
 // 2. Colaboradores (Gestão restrita a Administrador)
-app.get('/api/collaborators', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/collaborators', authenticateToken, limited((req, res) => {
   // Administradores podem ver todos (inclusive inativos); colaboradores regulares veem os ativos
   const isAdmin = req.user?.role === 'ADMIN';
   const list = storage.getCollaborators(isAdmin);
   return res.json(list);
-});
+}, { label: 'collaborators:list' }));
 
-app.post('/api/collaborators', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/collaborators', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const { mecanographicNumber, name, role } = req.body;
   const result = storage.addCollaborator(mecanographicNumber, name, role || 'COLABORADOR', req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.status(201).json(result.collaborator);
-});
+}, { label: 'collaborators:create' }));
 
-app.patch('/api/collaborators/:id', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/collaborators/:id', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const { mecanographicNumber, name, role, status } = req.body;
   const result = storage.updateCollaborator(
     req.params.id,
@@ -229,17 +270,17 @@ app.patch('/api/collaborators/:id', authenticateToken, requireRole(['ADMIN']), (
     return res.status(400).json({ error: result.error });
   }
   return res.json(result.collaborator);
-});
+}, { label: 'collaborators:update' }));
 
-app.patch('/api/collaborators/:id/deactivate', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/collaborators/:id/deactivate', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const result = storage.deactivateCollaborator(req.params.id, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.json({ success: true, message: 'Colaborador desativado.' });
-});
+}, { label: 'collaborators:deactivate' }));
 
-app.patch('/api/collaborators/:id/role', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/collaborators/:id/role', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const { role } = req.body;
   if (role !== 'ADMIN' && role !== 'ADMIN_2' && role !== 'COLABORADOR' && role !== 'GESTOR_STOCKS_PDE') {
     return res.status(400).json({ error: 'Perfil inválido.' });
@@ -249,23 +290,23 @@ app.patch('/api/collaborators/:id/role', authenticateToken, requireRole(['ADMIN'
     return res.status(400).json({ error: result.error });
   }
   return res.json({ success: true, message: 'Perfil atualizado.' });
-});
+}, { label: 'collaborators:role' }));
 
-app.delete('/api/collaborators/:id', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.delete('/api/collaborators/:id', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const result = storage.deleteCollaborator(req.params.id, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.json({ success: true, message: 'Colaborador removido da secção.' });
-});
+}, { label: 'collaborators:delete' }));
 
 // Datas Selecionáveis da Semana e Adição de Próxima Semana
-app.get('/api/weeks/dates', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/weeks/dates', authenticateToken, limited((req, res) => {
   const dates = storage.getAvailableDates(req.user);
   return res.json(dates);
-});
+}, { label: 'weeks:dates' }));
 
-app.post('/api/weeks/add-next', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/weeks/add-next', authenticateToken, requireRole(['ADMIN']), limited(async (req, res) => {
   const { weekLabel } = req.body;
   const result = await storage.addNextWeek(weekLabel || 'Semana 16/11 a 22/11', req.user!);
   if (!result.success) {
@@ -277,10 +318,10 @@ app.post('/api/weeks/add-next', authenticateToken, requireRole(['ADMIN']), async
     tasksCount: result.tasksCount,
     availableDates: storage.getAvailableDates(req.user),
   });
-});
+}, { timeoutMs: HEAVY_TASK_TIMEOUT_MS, label: 'weeks:add-next' }));
 
 // 3. Tarefas do dia e Desempenho/Pontuação Anual
-app.get('/api/tasks', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/tasks', authenticateToken, limited((req, res) => {
   const { date, collaboratorNumber } = req.query as { date?: string; collaboratorNumber?: string };
   const user = req.user!;
   const canViewAll = user.role === 'ADMIN' || user.role === 'ADMIN_2';
@@ -300,9 +341,9 @@ app.get('/api/tasks', authenticateToken, (req: AuthenticatedRequest, res: Respon
   });
 
   return res.json(tasks);
-});
+}, { label: 'tasks:list' }));
 
-app.get('/api/tasks/performance', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/tasks/performance', authenticateToken, limited((req, res) => {
   const { date, collaboratorNumber } = req.query as { date?: string; collaboratorNumber?: string };
   const user = req.user!;
   const canViewAll = user.role === 'ADMIN' || user.role === 'ADMIN_2';
@@ -320,18 +361,18 @@ app.get('/api/tasks/performance', authenticateToken, (req: AuthenticatedRequest,
 
   const perf = storage.getTaskPerformance(effectiveDate, targetNumber);
   return res.json(perf);
-});
+}, { label: 'tasks:performance' }));
 
-app.post('/api/tasks/additional', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/tasks/additional', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const { collaboratorNumber, date, description, time, ipaPoints } = req.body;
   const result = storage.addAdditionalTask(collaboratorNumber, date, description, time, req.user!, ipaPoints);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.status(201).json(result.task);
-});
+}, { label: 'tasks:create-additional' }));
 
-app.patch('/api/tasks/:id/status', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/tasks/:id/status', authenticateToken, limited((req, res) => {
   const { status, observation } = req.body;
   if (!['POR_ASSINALAR', 'FEITA', 'NAO_FEITA'].includes(status)) {
     return res.status(400).json({ error: 'Estado de tarefa inválido.' });
@@ -342,46 +383,46 @@ app.patch('/api/tasks/:id/status', authenticateToken, (req: AuthenticatedRequest
     return res.status(403).json({ error: result.error });
   }
   return res.json(result.task);
-});
+}, { label: 'tasks:update-status' }));
 
-app.patch('/api/tasks/:id', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/tasks/:id', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const { description, time, ipaPoints } = req.body;
   const result = storage.updateTaskDetails(req.params.id, { description, time, ipaPoints }, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.json(result.task);
-});
+}, { label: 'tasks:update' }));
 
-app.delete('/api/tasks/:id', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.delete('/api/tasks/:id', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const result = storage.deleteTask(req.params.id, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.json({ success: true, message: 'Tarefa removida com sucesso.' });
-});
+}, { label: 'tasks:delete' }));
 
 // 3b. Notificações na App
-app.get('/api/notifications', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/notifications', authenticateToken, limited((req, res) => {
   const list = storage.getNotifications(req.user!.mecanographicNumber);
   return res.json(list);
-});
+}, { label: 'notifications:list' }));
 
-app.patch('/api/notifications/:id/read', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/notifications/:id/read', authenticateToken, limited((req, res) => {
   const success = storage.markNotificationAsRead(req.params.id, req.user!.mecanographicNumber);
   if (!success) {
     return res.status(404).json({ error: 'Notificação não encontrada.' });
   }
   return res.json({ success: true });
-});
+}, { label: 'notifications:read' }));
 
-app.post('/api/notifications/mark-all-read', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/notifications/mark-all-read', authenticateToken, limited((req, res) => {
   storage.markAllNotificationsAsRead(req.user!.mecanographicNumber);
   return res.json({ success: true });
-});
+}, { label: 'notifications:mark-all-read' }));
 
 // 4. Hora de refeição
-app.get('/api/meals', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/meals', authenticateToken, limited((req, res) => {
   const { date, collaboratorNumber } = req.query as { date?: string; collaboratorNumber?: string };
   if (!date) {
     return res.status(400).json({ error: 'Data obrigatória.' });
@@ -397,10 +438,10 @@ app.get('/api/meals', authenticateToken, (req: AuthenticatedRequest, res: Respon
 
   const meal = storage.getMealSchedule(date, targetNumber);
   return res.json(meal || null);
-});
+}, { label: 'meals:get' }));
 
 // 4b. Situação Diária e Escala (Trabalho, Folga, Férias, Ausência)
-app.get('/api/shifts/status', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/shifts/status', authenticateToken, limited((req, res) => {
   const { date, collaboratorNumber } = req.query as { date?: string; collaboratorNumber?: string };
   if (!date) {
     return res.status(400).json({ error: 'Data obrigatória.' });
@@ -416,9 +457,9 @@ app.get('/api/shifts/status', authenticateToken, (req: AuthenticatedRequest, res
 
   const statusInfo = storage.getShiftStatus(date, targetNumber);
   return res.json(statusInfo);
-});
+}, { label: 'shifts:status' }));
 
-app.get('/api/shifts/all', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/shifts/all', authenticateToken, limited((req, res) => {
   const { date } = req.query as { date?: string };
   if (!date) {
     return res.status(400).json({ error: 'Data obrigatória.' });
@@ -431,34 +472,34 @@ app.get('/api/shifts/all', authenticateToken, (req: AuthenticatedRequest, res: R
 
   const list = storage.getAllShiftsForDate(date);
   return res.json(list);
-});
+}, { label: 'shifts:all' }));
 
 // 5. Catálogo de artigos
-app.get('/api/articles', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/articles', authenticateToken, limited((req, res) => {
   const activeOnly = req.query.all !== 'true';
   const articles = storage.getArticles(activeOnly);
   return res.json(articles);
-});
+}, { label: 'articles:list' }));
 
-app.post('/api/articles', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/articles', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const { sku, description, unit, barcode, category } = req.body;
   const result = storage.addArticle(sku, description, unit, barcode, category, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.status(201).json(result.article);
-});
+}, { label: 'articles:create' }));
 
-app.patch('/api/articles/:id', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/articles/:id', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const result = storage.updateArticle(req.params.id, req.body, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.json(result.article);
-});
+}, { label: 'articles:update' }));
 
 // 6. Aba stocks (Excessos e Roturas)
-app.get('/api/stocks', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/stocks', authenticateToken, limited((req, res) => {
   const { date, type, status, articleQuery } = req.query as {
     date?: string;
     type?: string;
@@ -467,26 +508,26 @@ app.get('/api/stocks', authenticateToken, (req: AuthenticatedRequest, res: Respo
   };
   const list = storage.getStocks({ date, type, status, articleQuery });
   return res.json(list);
-});
+}, { label: 'stocks:list' }));
 
-app.post('/api/stocks', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/stocks', authenticateToken, limited((req, res) => {
   const result = storage.createStockRecord(req.body, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.status(201).json({ record: result.record, warning: result.warning });
-});
+}, { label: 'stocks:create' }));
 
-app.patch('/api/stocks/:id', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/stocks/:id', authenticateToken, limited((req, res) => {
   const result = storage.updateStockRecord(req.params.id, req.body, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.json(result.record);
-});
+}, { label: 'stocks:update' }));
 
 // 7. Relatório diário (Acesso restrito a Administradores e Administrador 2)
-app.get('/api/reports/daily', authenticateToken, requireRole(['ADMIN', 'ADMIN_2']), (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/reports/daily', authenticateToken, requireRole(['ADMIN', 'ADMIN_2']), limited((req, res) => {
   const { date, articleQuery, type, status, period, reportScope } = req.query as {
     date?: string;
     articleQuery?: string;
@@ -504,14 +545,14 @@ app.get('/api/reports/daily', authenticateToken, requireRole(['ADMIN', 'ADMIN_2'
     reportScope,
   });
   return res.json(summary);
-});
+}, { timeoutMs: 45_000, label: 'reports:daily' }));
 
 // 8. Importações de PDF
-app.get('/api/imports', authenticateToken, requireRole(['ADMIN']), (_req: AuthenticatedRequest, res: Response) => {
+app.get('/api/imports', authenticateToken, requireRole(['ADMIN']), limited((_req, res) => {
   return res.json(storage.getImports());
-});
+}, { label: 'imports:list' }));
 
-app.post('/api/imports/preview', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/imports/preview', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const { sourceType, week } = req.body;
   if (!sourceType || (sourceType !== 'PTD' && sourceType !== 'PTS')) {
     return res.status(400).json({ error: 'Tipo de fonte inválido (deve ser PTD ou PTS).' });
@@ -520,9 +561,9 @@ app.post('/api/imports/preview', authenticateToken, requireRole(['ADMIN']), (req
   const collaborators = storage.getCollaborators(false);
   const result = parseScheduleFile(sourceType, week || 'Semana 9/11 a 15/11', collaborators);
   return res.json(result);
-});
+}, { timeoutMs: HEAVY_TASK_TIMEOUT_MS, label: 'imports:preview' }));
 
-app.post('/api/imports/publish', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/imports/publish', authenticateToken, requireRole(['ADMIN']), limited(async (req, res) => {
   const { sourceType, week, fileName, fileHash } = req.body;
   const collaborators = storage.getCollaborators(false);
   const parsed = parseScheduleFile(sourceType, week || 'Semana 9/11 a 15/11', collaborators);
@@ -560,47 +601,47 @@ app.post('/api/imports/publish', authenticateToken, requireRole(['ADMIN']), asyn
     mealsCount: parsed.generatedMeals.length,
     warnings: parsed.warnings,
   });
-});
+}, { timeoutMs: HEAVY_TASK_TIMEOUT_MS, label: 'imports:publish' }));
 
-app.post('/api/imports/:id/revert', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/imports/:id/revert', authenticateToken, requireRole(['ADMIN']), limited(async (req, res) => {
   const result = await storage.revertImport(req.params.id, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.json({ success: true, message: 'Versão anulada com sucesso. Tarefas e refeições desta versão foram removidas.' });
-});
+}, { timeoutMs: HEAVY_TASK_TIMEOUT_MS, label: 'imports:revert' }));
 
-app.delete('/api/imports/:id', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+app.delete('/api/imports/:id', authenticateToken, requireRole(['ADMIN']), limited(async (req, res) => {
   const result = await storage.deleteImportRecord(req.params.id, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.json({ success: true, message: 'Registo removido do histórico.' });
-});
+}, { timeoutMs: HEAVY_TASK_TIMEOUT_MS, label: 'imports:delete' }));
 
 // 9. Auditoria
-app.get('/api/audits', authenticateToken, requireRole(['ADMIN']), (_req: AuthenticatedRequest, res: Response) => {
+app.get('/api/audits', authenticateToken, requireRole(['ADMIN']), limited((_req, res) => {
   return res.json(storage.getAudits());
-});
+}, { label: 'audits:list' }));
 
 // 10. Estatísticas e Histórico da Base de Dados (Firestore)
-app.get('/api/statistics', authenticateToken, requireRole(['ADMIN']), (_req: AuthenticatedRequest, res: Response) => {
+app.get('/api/statistics', authenticateToken, requireRole(['ADMIN']), limited((_req, res) => {
   const stats = storage.getStatistics();
   return res.json(stats);
-});
+}, { timeoutMs: 45_000, label: 'statistics:get' }));
 
-app.get('/api/history', authenticateToken, requireRole(['ADMIN']), (_req: AuthenticatedRequest, res: Response) => {
+app.get('/api/history', authenticateToken, requireRole(['ADMIN']), limited((_req, res) => {
   const records = storage.getHistoricalRecords();
   return res.json(records);
-});
+}, { timeoutMs: 45_000, label: 'history:get' }));
 
-app.post('/api/database/sync', authenticateToken, requireRole(['ADMIN']), async (_req: AuthenticatedRequest, res: Response) => {
+app.post('/api/database/sync', authenticateToken, requireRole(['ADMIN']), limited(async (_req, res) => {
   const result = await storage.forceDatabaseSync();
   return res.json(result);
-});
+}, { timeoutMs: HEAVY_TASK_TIMEOUT_MS, label: 'database:sync' }));
 
 // 11. PDE (Pedidos de Qualidade de Artigos)
-app.get('/api/pdes', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/pdes', authenticateToken, limited((req, res) => {
   const { status, articleQuery, date, myOnly } = req.query as {
     status?: string;
     articleQuery?: string;
@@ -616,9 +657,9 @@ app.get('/api/pdes', authenticateToken, (req: AuthenticatedRequest, res: Respons
   });
 
   return res.json(list);
-});
+}, { label: 'pdes:list' }));
 
-app.post('/api/pdes', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/pdes', authenticateToken, limited((req, res) => {
   const { articleId, batchNumber, arrivalDate, expirationDate, defectReason, notes, photos } = req.body;
 
   const result = storage.createPde(
@@ -639,9 +680,9 @@ app.post('/api/pdes', authenticateToken, (req: AuthenticatedRequest, res: Respon
   }
 
   return res.status(201).json(result.pde);
-});
+}, { label: 'pdes:create' }));
 
-app.patch('/api/pdes/:id/status', authenticateToken, requireRole(['ADMIN', 'ADMIN_2', 'GESTOR_STOCKS_PDE']), (req: AuthenticatedRequest, res: Response) => {
+app.patch('/api/pdes/:id/status', authenticateToken, requireRole(['ADMIN', 'ADMIN_2', 'GESTOR_STOCKS_PDE']), limited((req, res) => {
   const { status, resolutionNotes } = req.body;
   if (!status || !['PENDENTE', 'RESOLVIDO', 'NAO_CONSIDERADO'].includes(status)) {
     return res.status(400).json({ error: 'Estado de PDE inválido. Utilize RESOLVIDO ou NAO_CONSIDERADO.' });
@@ -666,18 +707,18 @@ app.patch('/api/pdes/:id/status', authenticateToken, requireRole(['ADMIN', 'ADMI
       : 'Estado do PDE atualizado.',
     pde: result.pde,
   });
-});
+}, { label: 'pdes:status' }));
 
-app.delete('/api/pdes/:id', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+app.delete('/api/pdes/:id', authenticateToken, limited((req, res) => {
   const result = storage.deletePde(req.params.id, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
   return res.json({ success: true, message: 'Pedido de PDE removido.' });
-});
+}, { label: 'pdes:delete' }));
 
 // 12. Importações em Excel (.xlsx) — Folha PTD (ptd app) e Folha PTS (pts app)
-app.post('/api/imports/excel-csv/preview', authenticateToken, requireRole(['ADMIN']), (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/imports/excel-csv/preview', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
   const { fileBase64, fileName, sourceType, week, explicitWeekSelected } = req.body as {
     fileBase64?: string;
     fileName?: string;
@@ -714,9 +755,9 @@ app.post('/api/imports/excel-csv/preview', authenticateToken, requireRole(['ADMI
   } catch (err: any) {
     return res.status(400).json({ error: `Erro ao processar ficheiro .xlsx: ${err.message}` });
   }
-});
+}, { timeoutMs: HEAVY_TASK_TIMEOUT_MS, label: 'imports:excel-preview' }));
 
-app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMIN']), async (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMIN']), limited(async (req, res) => {
   const { fileBase64, fileName, sourceType, week, explicitWeekSelected } = req.body as {
     fileBase64?: string;
     fileName?: string;
@@ -854,10 +895,10 @@ app.post('/api/imports/excel-csv/publish', authenticateToken, requireRole(['ADMI
   } catch (err: any) {
     return res.status(400).json({ error: `Erro ao publicar ficheiro .xlsx: ${err.message}` });
   }
-});
+}, { timeoutMs: HEAVY_TASK_TIMEOUT_MS, label: 'imports:excel-publish' }));
 
 // Rota para descarregar Modelo Excel (.xlsx com folhas PTD e PTS)
-app.get('/api/templates/schedule', authenticateToken, requireRole(['ADMIN']), (_req: AuthenticatedRequest, res: Response) => {
+app.get('/api/templates/schedule', authenticateToken, requireRole(['ADMIN']), limited((_req, res) => {
   const collaborators = storage.getCollaborators(false);
   const fileBuffer = generateScheduleTemplateBuffer(collaborators);
 
@@ -867,6 +908,25 @@ app.get('/api/templates/schedule', authenticateToken, requireRole(['ADMIN']), (_
   );
   res.setHeader('Content-Disposition', 'attachment; filename="Modelo_Escala_PTD_PTS.xlsx"');
   return res.send(fileBuffer);
+}, { timeoutMs: 30_000, label: 'templates:schedule' }));
+
+// Gestão centralizada de erros da API (timeouts, fila cheia, erros inesperados)
+app.use('/api', (err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (res.headersSent || res.writableEnded) {
+    return;
+  }
+  if (err instanceof TaskTimeoutError) {
+    return res.status(504).json({ error: err.message });
+  }
+  if (err instanceof TaskQueueFullError) {
+    return res.status(503).json({ error: err.message });
+  }
+  if (err instanceof TaskAbortedError) {
+    return;
+  }
+  const message = err instanceof Error ? err.message : 'Erro interno do servidor.';
+  console.error('[API] Erro não tratado:', err);
+  return res.status(500).json({ error: message });
 });
 
 // Servir estáticos de assets (como os PDFs originais)
@@ -891,9 +951,15 @@ async function startServer() {
       res.sendFile(distIndexHtml);
     });
 
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Servidor a correr na porta ${PORT} [http://0.0.0.0:${PORT}]`);
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      const stats = getLimiterStats();
+      console.log(
+        `Servidor a correr na porta ${PORT} [http://0.0.0.0:${PORT}] (MAX_CONCURRENT_TASKS=${stats.maxConcurrentTasks})`
+      );
     });
+    server.requestTimeout = 115_000;
+    server.headersTimeout = 60_000;
+    server.keepAliveTimeout = 65_000;
     return;
   }
 
@@ -939,9 +1005,15 @@ async function startServer() {
     }
   });
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Servidor a correr na porta ${PORT} [http://0.0.0.0:${PORT}]`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    const stats = getLimiterStats();
+    console.log(
+      `Servidor a correr na porta ${PORT} [http://0.0.0.0:${PORT}] (MAX_CONCURRENT_TASKS=${stats.maxConcurrentTasks})`
+    );
   });
+  server.requestTimeout = 115_000;
+  server.headersTimeout = 60_000;
+  server.keepAliveTimeout = 65_000;
 
   await viteReady;
 }

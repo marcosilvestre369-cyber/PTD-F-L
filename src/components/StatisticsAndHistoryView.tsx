@@ -37,25 +37,30 @@ export const StatisticsAndHistoryView: React.FC = () => {
   const [historyTab, setHistoryTab] = useState<'audits' | 'tasks' | 'stocks'>('tasks');
   const [historySearch, setHistorySearch] = useState('');
 
-  const loadData = async () => {
+  const loadData = async (signal?: AbortSignal) => {
     setIsLoading(true);
     setError(null);
     try {
       const [stats, history] = await Promise.all([
-        api.getStatistics(),
-        api.getHistory(),
+        api.getStatistics(signal),
+        api.getHistory(signal),
       ]);
       setStatistics(stats);
       setHistoryData(history);
     } catch (err: any) {
+      if (api.isAbortError(err)) return;
       setError(err.message || 'Erro ao carregar estatísticas da base de dados.');
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadData();
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
   }, []);
 
   const handleManualSync = async () => {

@@ -29,6 +29,7 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterSearch, setFilterSearch] = useState<string>('');
+  const [debouncedFilterSearch, setDebouncedFilterSearch] = useState<string>('');
 
   // Modal de Criação de Registo
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -70,32 +71,61 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
     setStockDate(selectedDate);
   }, [selectedDate]);
 
-  const loadData = async () => {
+  // Debounce da pesquisa de stocks para evitar pedidos excessivos a cada tecla
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedFilterSearch(filterSearch.trim());
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [filterSearch]);
+
+  // Carregar catálogo de artigos e colaboradores apenas uma vez ao montar
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      api.getArticles(true, controller.signal),
+      api.getCollaborators(controller.signal),
+    ])
+      .then(([fetchedArticles, fetchedColabs]) => {
+        setArticles(fetchedArticles);
+        setCollaborators(fetchedColabs);
+      })
+      .catch(err => {
+        if (!api.isAbortError(err)) {
+          setError(err.message || 'Erro ao carregar catálogo e colaboradores.');
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  const loadStocks = async (signal?: AbortSignal) => {
     setIsLoading(true);
     setError(null);
     try {
-      const [fetchedStocks, fetchedArticles, fetchedColabs] = await Promise.all([
-        api.getStocks({
+      const fetchedStocks = await api.getStocks(
+        {
           type: filterType || undefined,
           status: filterStatus || undefined,
-          articleQuery: filterSearch || undefined,
-        }),
-        api.getArticles(true),
-        api.getCollaborators(),
-      ]);
+          articleQuery: debouncedFilterSearch || undefined,
+        },
+        signal
+      );
       setStocks(fetchedStocks);
-      setArticles(fetchedArticles);
-      setCollaborators(fetchedColabs);
     } catch (err: any) {
+      if (api.isAbortError(err)) return;
       setError(err.message || 'Erro ao carregar dados de stock.');
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, [filterType, filterStatus, filterSearch]);
+    const controller = new AbortController();
+    loadStocks(controller.signal);
+    return () => controller.abort();
+  }, [filterType, filterStatus, debouncedFilterSearch]);
 
   const handleOpenCreate = (type: StockType) => {
     setRecordType(type);
@@ -153,7 +183,7 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
         setFormWarning(res.warning);
       }
       setFormSuccess('Registo gravado com sucesso no servidor!');
-      await loadData();
+      await loadStocks();
       setTimeout(() => {
         setIsCreateModalOpen(false);
       }, 1200);
@@ -218,7 +248,7 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
         observation: editObservation,
       });
       setEditingRecord(null);
-      await loadData();
+      await loadStocks();
     } catch (err: any) {
       setEditError(`Erro ao atualizar: ${err.message}`);
     } finally {

@@ -303,23 +303,28 @@ export async function syncAllToFirestore(
   if (!firestore) return false;
 
   try {
-    const ops: Promise<boolean>[] = [
-      syncDocumentsBatch('collaborators', data.collaborators),
-      syncDocumentsBatch('tasks', data.tasks),
-      syncDocumentsBatch('meals', data.meals),
-      syncDocumentsBatch('stocks', data.stocks),
-      syncDocumentsBatch('pdes', data.pdes || []),
-      syncDocumentsBatch('notifications', data.notifications || []),
-      syncDocumentsBatch('imports', data.imports || []),
-      syncDocumentsBatch('audits', (data.audits || []).slice(0, 500)),
+    // Executar cada coleção sequencialmente para evitar picos de tarefas simultâneas no processo Node.js
+    const collectionsToSync: Array<[string, Array<{ id: string } & Record<string, any>>]> = [
+      ['collaborators', data.collaborators],
+      ['tasks', data.tasks],
+      ['meals', data.meals],
+      ['stocks', data.stocks],
+      ['pdes', data.pdes || []],
+      ['notifications', data.notifications || []],
+      ['imports', data.imports || []],
+      ['audits', (data.audits || []).slice(0, 500)],
     ];
 
     if (options?.includeArticles !== false) {
-      ops.push(syncDocumentsBatch('articles', data.articles));
+      collectionsToSync.push(['articles', data.articles]);
     }
 
-    const results = await Promise.all(ops);
-    const allOk = results.every(Boolean);
+    let allOk = true;
+    for (const [colName, items] of collectionsToSync) {
+      const ok = await syncDocumentsBatch(colName, items);
+      if (!ok) allOk = false;
+    }
+
     if (allOk) {
       console.log('[Firebase] Sincronização completa com o Firestore concluída com sucesso!');
     }
@@ -433,18 +438,32 @@ export async function loadAllFromFirestore(): Promise<{
   if (!firestore) return null;
 
   try {
+    // Carregar em blocos pequenos (máx. 3 coleções em paralelo) para respeitar limites de concorrência
+    const collectionNames = [
+      'tasks',
+      'meals',
+      'stocks',
+      'pdes',
+      'notifications',
+      'collaborators',
+      'articles',
+      'imports',
+      'audits',
+    ] as const;
+
+    const loadChunked = async () => {
+      const results: Array<Awaited<ReturnType<typeof getDocs>>> = [];
+      const CHUNK_SIZE = 3;
+      for (let i = 0; i < collectionNames.length; i += CHUNK_SIZE) {
+        const slice = collectionNames.slice(i, i + CHUNK_SIZE);
+        const chunkSnaps = await Promise.all(slice.map(name => getDocs(collection(firestore, name))));
+        results.push(...chunkSnaps);
+      }
+      return results;
+    };
+
     const snapshots = await withTimeout(
-      Promise.all([
-        getDocs(collection(firestore, 'tasks')),
-        getDocs(collection(firestore, 'meals')),
-        getDocs(collection(firestore, 'stocks')),
-        getDocs(collection(firestore, 'pdes')),
-        getDocs(collection(firestore, 'notifications')),
-        getDocs(collection(firestore, 'collaborators')),
-        getDocs(collection(firestore, 'articles')),
-        getDocs(collection(firestore, 'imports')),
-        getDocs(collection(firestore, 'audits')),
-      ]),
+      loadChunked(),
       FIRESTORE_HYDRATE_TIMEOUT_MS,
       'loadAllFromFirestore',
       null
