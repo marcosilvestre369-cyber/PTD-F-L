@@ -101,12 +101,13 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
     setRecordType(type);
     setRegistrationDate(selectedDate);
     setStockDate(selectedDate);
-    setSelectedArticleId(articles[0]?.id || '');
+    setSelectedArticleId('');
     setArticleSearchQuery('');
     setBoxes(1);
     setDateType("R's");
     setLot('');
     setObservation('');
+    setError(null);
     setFormWarning(null);
     setFormSuccess(null);
     setIsCreateModalOpen(true);
@@ -233,11 +234,24 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
     s => s.status === 'POR_TRATAR' && s.treatmentDate < selectedDate && s.registrationDate < selectedDate
   );
 
+  const normalizeSearch = (val: string) =>
+    val
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
   const filteredArticles = articles.filter(a => {
-    const q = articleSearchQuery.toLowerCase().trim();
+    const q = normalizeSearch(articleSearchQuery.trim());
     if (!q) return true;
-    return a.description.toLowerCase().includes(q) || a.sku.includes(q) || a.category.toLowerCase().includes(q);
+    return (
+      normalizeSearch(a.description).includes(q) ||
+      normalizeSearch(a.sku).includes(q) ||
+      normalizeSearch(a.category || '').includes(q) ||
+      (a.barcode ? normalizeSearch(a.barcode).includes(q) : false)
+    );
   });
+
+  const selectedArticle = articles.find(a => a.id === selectedArticleId) || null;
 
   const renderStockRow = (rec: StockRecord, isPrevious = false) => {
     const isOwner = rec.authorNumber === currentUser.mecanographicNumber;
@@ -642,39 +656,92 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
               </div>
 
               {/* 5.1 Seleção do Artigo do Catálogo Comum */}
-              <div>
-                <label className="block text-xs font-bold text-on-surface mb-1">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-on-surface">
                   Artigo da Secção (Catálogo Oficial) *
                 </label>
-                <input
-                  type="text"
-                  value={articleSearchQuery}
-                  onChange={e => setArticleSearchQuery(e.target.value)}
-                  className="w-full mb-1.5 px-3 py-2 bg-surface-container border border-line rounded-xl text-xs text-on-surface focus:bg-surface-card focus:outline-none focus:ring-2 focus:ring-amber-brand"
-                />
-                <select
-                  required
-                  size={6}
-                  value={selectedArticleId}
-                  onChange={e => setSelectedArticleId(e.target.value)}
-                  className="w-full px-2 py-1.5 bg-surface-container border border-line rounded-xl text-xs text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-brand font-mono"
-                >
-                  {filteredArticles.slice(0, 100).map(a => (
-                    <option key={a.id} value={a.id} className="py-1 bg-surface-card text-on-surface">
-                      [{a.sku}] {a.description} ({a.unit}) - {a.category}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex justify-between items-center text-[11px] text-on-surface-muted mt-1">
-                  <span>
-                    Catálogo oficial: {articles.length} artigos da secção.
-                  </span>
-                  {filteredArticles.length > 100 && (
-                    <span className="text-amber-ink font-medium">
-                      A mostrar 100 de {filteredArticles.length} resultados (pesquise para filtrar)
-                    </span>
-                  )}
-                </div>
+
+                {selectedArticle ? (
+                  <div className="p-3 bg-surface-container border border-amber-border rounded-xl flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-black text-amber-ink bg-amber-tint px-1.5 py-0.5 rounded border border-amber-border shrink-0">
+                          SKU {selectedArticle.sku}
+                        </span>
+                        <strong className="text-xs sm:text-sm text-on-surface truncate">
+                          {selectedArticle.description}
+                        </strong>
+                      </div>
+                      <span className="text-[11px] text-on-surface-muted block mt-0.5">
+                        {selectedArticle.category || 'Geral'} · Unidade: {selectedArticle.unit}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedArticleId('');
+                        setError(null);
+                      }}
+                      className="text-xs font-bold text-danger-ink bg-danger-tint hover:bg-danger-border/40 border border-danger-border px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                      Alterar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-on-surface-subtle absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Pesquisar por SKU, nome ou categoria..."
+                        value={articleSearchQuery}
+                        onChange={e => setArticleSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-surface-container border border-line rounded-xl text-xs text-on-surface font-medium focus:bg-surface-card focus:outline-none focus:ring-2 focus:ring-amber-brand"
+                      />
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto divide-y divide-line-subtle border border-line rounded-xl bg-surface-card shadow-2xs">
+                      {filteredArticles.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-on-surface-muted italic">
+                          Nenhum artigo encontrado para "{articleSearchQuery}".
+                        </div>
+                      ) : (
+                        filteredArticles.slice(0, 100).map(a => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedArticleId(a.id);
+                              setArticleSearchQuery('');
+                              setError(null);
+                            }}
+                            className="w-full text-left px-3 py-2.5 hover:bg-amber-tint/50 active:bg-amber-tint transition-colors flex items-center justify-between gap-2 text-xs cursor-pointer"
+                          >
+                            <div className="min-w-0">
+                              <span className="font-mono font-bold text-amber-ink mr-2">[{a.sku}]</span>
+                              <span className="font-semibold text-on-surface">{a.description}</span>
+                              <span className="text-[11px] text-on-surface-muted ml-1.5">({a.unit})</span>
+                            </div>
+                            <span className="text-[10px] text-on-surface-muted bg-surface-container px-1.5 py-0.5 rounded border border-line shrink-0">
+                              {a.category || 'Geral'}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px] text-on-surface-muted">
+                      <span>
+                        Toque num artigo para selecionar ({articles.length} no catálogo).
+                      </span>
+                      {filteredArticles.length > 100 && (
+                        <span className="text-amber-ink font-medium">
+                          A mostrar 100 de {filteredArticles.length}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Data do Registo Operacional */}
