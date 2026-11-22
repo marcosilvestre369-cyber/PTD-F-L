@@ -1,6 +1,26 @@
 import type { Article } from "../src/types/index.ts";
 
-// Catálogo oficial completo extraído dos 6 ficheiros de Barcode da secção (956 artigos únicos)
+export const CATALOG_VERSION = "2026-11-19";
+export const CATALOG_UPDATED_AT = "2026-11-19T20:40:00.000Z";
+
+// Artigos descontinuados removidos na atualização oficial de 19-11-2026 (13 artigos)
+export const REMOVED_CATALOG_IDS: string[] = [
+  "art-7655655",
+  "art-8610740",
+  "art-5121962",
+  "art-2170414",
+  "art-7889326",
+  "art-8894240",
+  "art-6841391",
+  "art-7945201",
+  "art-8650989",
+  "art-6998190",
+  "art-7390028",
+  "art-7432878",
+  "art-7371295"
+];
+
+// Catálogo oficial completo extraído dos 6 ficheiros de Barcode da secção (966 artigos únicos — 19-11-2026)
 export const FULL_SECTION_ARTICLES: Article[] = [
   {
     "id": "art-2597619",
@@ -38,13 +58,13 @@ export const FULL_SECTION_ARTICLES: Article[] = [
   {
     "id": "art-7221212",
     "sku": "7221212",
-    "description": "LARANJA CAL. 3/4 CNT KG",
+    "description": "LARANJA CAL. 70/85 CNT KG",
     "unit": "KG",
     "barcode": "2651171000000",
     "category": "Frutas",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-2466879",
@@ -100,6 +120,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-9029954",
+    "sku": "9029954",
+    "description": "CLEMENTINA COM FOLHA 750G",
+    "unit": "EA",
+    "barcode": "5601312189886",
+    "category": "Frutas",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-7740936",
@@ -201,6 +232,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
+    "id": "art-8505037",
+    "sku": "8505037",
+    "description": "MELAO EXTRA DOCE KG",
+    "unit": "KG",
+    "barcode": "2650879000000",
+    "category": "Frutas",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
     "id": "art-2076563",
     "sku": "2076563",
     "description": "MELAO VERDE INTEIRO CNT KG",
@@ -245,6 +287,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
+    "id": "art-8042745",
+    "sku": "8042745",
+    "description": "CEREJA 26+ 400 G",
+    "unit": "EA",
+    "barcode": "5601312187431",
+    "category": "Frutas",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
     "id": "art-2562261",
     "sku": "2562261",
     "description": "PESSEGO PARAGUAYO CNT C A/AA KG",
@@ -272,17 +325,6 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "description": "CASTANHA CNT KG",
     "unit": "KG",
     "barcode": "2615864000000",
-    "category": "Frutas",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
-    "id": "art-7655655",
-    "sku": "7655655",
-    "description": "CASTANHA MARTAÍNHA 1KG",
-    "unit": "EA",
-    "barcode": "5600974400124",
     "category": "Frutas",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
@@ -377,17 +419,6 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
-    "id": "art-8610740",
-    "sku": "8610740",
-    "description": "MARMELO 0% DESPERDÍCIO 1.5 KG",
-    "unit": "EA",
-    "barcode": "5601312187158",
-    "category": "Frutas",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
     "id": "art-2076558",
     "sku": "2076558",
     "description": "MARMELO CNT KG",
@@ -465,6 +496,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
+    "id": "art-3725842",
+    "sku": "3725842",
+    "description": "KIWI 23/30 CNT KG",
+    "unit": "KG",
+    "barcode": "2615368000000",
+    "category": "Frutas",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
     "id": "art-7640212",
     "sku": "7640212",
     "description": "KIWI GOLD ZESPRI 500 G",
@@ -485,6 +527,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-7683291",
+    "sku": "7683291",
+    "description": "KIWI RED PASSION 270 G",
+    "unit": "EA",
+    "barcode": "5603511007961",
+    "category": "Frutas",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-6317851",
@@ -674,15 +727,15 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
-    "id": "art-5121962",
-    "sku": "5121962",
-    "description": "KUMQUAT CNT KG",
-    "unit": "KG",
-    "barcode": "2650012000000",
+    "id": "art-7619078",
+    "sku": "7619078",
+    "description": "LITCHI 250 G",
+    "unit": "EA",
+    "barcode": "5601312878261",
     "category": "Frutas",
     "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-4996376",
@@ -995,13 +1048,13 @@ export const FULL_SECTION_ARTICLES: Article[] = [
   {
     "id": "art-8639500",
     "sku": "8639500",
-    "description": "MAÇÃ GOLDEN NACIONAL SR 65/73 1 KG",
+    "description": "MAÇÃ GOLDEN NACIONAL SR 63/73 1 KG",
     "unit": "EA",
     "barcode": "5601312187233",
     "category": "Frutas",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-7893175",
@@ -1125,6 +1178,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
+    "id": "art-8586314",
+    "sku": "8586314",
+    "description": "PERA ROCHA DO OESTE 600G",
+    "unit": "EA",
+    "barcode": "5601312187004",
+    "category": "Frutas",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
     "id": "art-7102076",
     "sku": "7102076",
     "description": "PERA ROCHA DO OESTE 65/70 KG",
@@ -1185,17 +1249,6 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "description": "PERA NASHI CNT CAL.70+ KG",
     "unit": "KG",
     "barcode": "2615947000000",
-    "category": "Frutas",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
-    "id": "art-2170414",
-    "sku": "2170414",
-    "description": "UVA RED GLOBE C/GRAINHA CNT KG",
-    "unit": "KG",
-    "barcode": "2604636000000",
     "category": "Frutas",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
@@ -1277,6 +1330,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-7049711",
+    "sku": "7049711",
+    "description": "CX FRUTAS E LEGUMES ZER0%D",
+    "unit": "EA",
+    "barcode": "5601312882114",
+    "category": "Frutas",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-8154262",
@@ -1477,6 +1541,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
+    "id": "art-7422031",
+    "sku": "7422031",
+    "description": "ALHO SECO MORADO CNT 200 G",
+    "unit": "EA",
+    "barcode": "5601312879954",
+    "category": "Legumes",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
     "id": "art-6011910",
     "sku": "6011910",
     "description": "BATATA ASSAR CNT EMB. 2 KG",
@@ -1556,24 +1631,24 @@ export const FULL_SECTION_ARTICLES: Article[] = [
   {
     "id": "art-5464171",
     "sku": "5464171",
-    "description": "BATATA ESPECIAL ASSAR SC EMB. 1KG",
+    "description": "BATATA ESPECIAL ASSAR CNT EMB. 1KG",
     "unit": "EA",
     "barcode": "5601312217626",
     "category": "Legumes",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-5464229",
     "sku": "5464229",
-    "description": "BATATA ESPECIAL COZER SC EMB. 3KG",
+    "description": "BATATA ESPECIAL COZER CNT EMB. 3KG",
     "unit": "EA",
     "barcode": "5601312217633",
     "category": "Legumes",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-7282059",
@@ -1922,17 +1997,6 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "description": "BETERRABA S/RAMA SR KG",
     "unit": "KG",
     "barcode": "2650754000000",
-    "category": "Legumes",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
-    "id": "art-7889326",
-    "sku": "7889326",
-    "description": "MILHO DOCE FRESCO 400G",
-    "unit": "EA",
-    "barcode": "5606586013530",
     "category": "Legumes",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
@@ -2509,6 +2573,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-7504930",
+    "sku": "7504930",
+    "description": "TOMATE ROSA BRAVO CNT KG",
+    "unit": "KG",
+    "barcode": "2650121000000",
+    "category": "Legumes",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-6030154",
@@ -3136,6 +3211,28 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-9054104",
+    "sku": "9054104",
+    "description": "BATATA ALHO ERVAS 570G VITACRESS",
+    "unit": "EA",
+    "barcode": "5606293500804",
+    "category": "Especialidades",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
+    "id": "art-9055605",
+    "sku": "9055605",
+    "description": "BATATA BABY AZEITE ERVAS AROMATICAS 310G",
+    "unit": "EA",
+    "barcode": "8436590121610",
+    "category": "Especialidades",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-8111247",
@@ -4579,6 +4676,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
+    "id": "art-9060140",
+    "sku": "9060140",
+    "description": "AZEITONA COBRANÇOSA TEMPERADA QAMPO 210G",
+    "unit": "EA",
+    "barcode": "5600692770035",
+    "category": "Especialidades",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
     "id": "art-8619844",
     "sku": "8619844",
     "description": "AZEITONA DOP QAMPO 210G",
@@ -4969,17 +5077,6 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "description": "TREMOÇO SAL MARINHO TARWI 40G",
     "unit": "EA",
     "barcode": "5060841230627",
-    "category": "Especialidades",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
-    "id": "art-8894240",
-    "sku": "8894240",
-    "description": "TREMOÇO SELEÇÃO TARWI 100G",
-    "unit": "EA",
-    "barcode": "5060841230818",
     "category": "Especialidades",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
@@ -5811,33 +5908,11 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
-    "id": "art-6841391",
-    "sku": "6841391",
-    "description": "SNACK MAÇÃ/COCO/AMÊNDOA FRUUT 30G",
-    "unit": "EA",
-    "barcode": "5600289150349",
-    "category": "Especialidades",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
     "id": "art-9040495",
     "sku": "9040495",
     "description": "STICKS MAÇÃ SABOR MARACUJÁ FRUUT 200G",
     "unit": "EA",
     "barcode": "5605173801840",
-    "category": "Especialidades",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
-    "id": "art-7945201",
-    "sku": "7945201",
-    "description": "STICKS MAÇÃ SABOR MORANGO FRUUT 20G",
-    "unit": "EA",
-    "barcode": "5600289150646",
     "category": "Especialidades",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
@@ -6779,17 +6854,6 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
-    "id": "art-8650989",
-    "sku": "8650989",
-    "description": "TOM YUM PEANUTS GOLDEN TURTLE 140G",
-    "unit": "EA",
-    "barcode": "8720301100798",
-    "category": "Especialidades",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
     "id": "art-8651150",
     "sku": "8651150",
     "description": "WASABI PEANUTS GOLDEN TURTLE 140G",
@@ -6898,6 +6962,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-8116816",
+    "sku": "8116816",
+    "description": "CAJU CRU CNT POUPANCA 400G",
+    "unit": "EA",
+    "barcode": "5601312876205",
+    "category": "Especialidades",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-8406301",
@@ -7120,6 +7195,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
+    "id": "art-7458314",
+    "sku": "7458314",
+    "description": "NOZ C/CASCA TRÁS-OS-MONTES ORGI. 500G",
+    "unit": "EA",
+    "barcode": "5601312879695",
+    "category": "Especialidades",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
     "id": "art-7226470",
     "sku": "7226470",
     "description": "NOZ CNT 50G",
@@ -7274,22 +7360,22 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
-    "id": "art-8117176",
-    "sku": "8117176",
+    "id": "art-7029183",
+    "sku": "7029183",
     "description": "PISTACHIO TOR.C/CASCA C/SAL CNT 200G",
     "unit": "EA",
-    "barcode": "5601312876458",
+    "barcode": "5601312882275",
     "category": "Especialidades",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
-    "id": "art-7029183",
-    "sku": "7029183",
+    "id": "art-8117176",
+    "sku": "8117176",
     "description": "PISTACHIO TOR.C/CASCA C/SAL CNT 200G",
     "unit": "EA",
-    "barcode": "5601312882275",
+    "barcode": "5601312876458",
     "category": "Especialidades",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
@@ -7703,17 +7789,6 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
-    "id": "art-6998190",
-    "sku": "6998190",
-    "description": "MISTURA FRUTOS BOSQUE CNT 200G",
-    "unit": "EA",
-    "barcode": "5601312882169",
-    "category": "Especialidades",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
     "id": "art-8117241",
     "sku": "8117241",
     "description": "MISTURA FRUTOS BOSQUE CNT POUPANCA 400G",
@@ -7824,15 +7899,15 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
-    "id": "art-7390028",
-    "sku": "7390028",
-    "description": "MISTURA PURO SABOR CNT 200G",
+    "id": "art-7381727",
+    "sku": "7381727",
+    "description": "MIX ATIVIDADE CNT 4X50G PACK POUPANÇA",
     "unit": "EA",
-    "barcode": "5601312880783",
+    "barcode": "5601312880745",
     "category": "Especialidades",
     "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-7237246",
@@ -7855,6 +7930,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-7445579",
+    "sku": "7445579",
+    "description": "MIX CAJU ARANDOS CNT 4X50G PACK POUPANÇA",
+    "unit": "EA",
+    "barcode": "5601312880233",
+    "category": "Especialidades",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-8493041",
@@ -7965,6 +8051,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-7381717",
+    "sku": "7381717",
+    "description": "MIX SPORT CNT 4X50G PACK POUPANÇA",
+    "unit": "EA",
+    "barcode": "5601312880752",
+    "category": "Especialidades",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-7237160",
@@ -8462,6 +8559,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
+    "id": "art-7775873",
+    "sku": "7775873",
+    "description": "ABACAXI SNACK CAMPOTEC 60G",
+    "unit": "EA",
+    "barcode": "5604581340569",
+    "category": "Especialidades",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
     "id": "art-9002923",
     "sku": "9002923",
     "description": "ABACAXI SUPREME 500G",
@@ -8759,17 +8867,6 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
-    "id": "art-7432878",
-    "sku": "7432878",
-    "description": "KIWI BIO ZESPRI 500G",
-    "unit": "EA",
-    "barcode": "5606999034733",
-    "category": "Frutas Bio",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
     "id": "art-7379331",
     "sku": "7379331",
     "description": "KIWI CNT BIO 400 G",
@@ -8786,17 +8883,6 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "description": "KIWI ZESPRI SUNGOLD BIO 500G",
     "unit": "EA",
     "barcode": "5606999034993",
-    "category": "Frutas Bio",
-    "active": true,
-    "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
-  },
-  {
-    "id": "art-7371295",
-    "sku": "7371295",
-    "description": "MANGA BIO EMB. 600 G",
-    "unit": "EA",
-    "barcode": "5601312880653",
     "category": "Frutas Bio",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
@@ -8889,6 +8975,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-8501864",
+    "sku": "8501864",
+    "description": "MAÇÃ PINK LADY BIO 600 G",
+    "unit": "EA",
+    "barcode": "5604764309833",
+    "category": "Frutas Bio",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-7439666",
@@ -9003,13 +9100,13 @@ export const FULL_SECTION_ARTICLES: Article[] = [
   {
     "id": "art-7971767",
     "sku": "7971767",
-    "description": "ALFACE ICEBERG CONTINENTE BIO 300 G",
+    "description": "ALFACE ICEBERG BIO 300 G",
     "unit": "EA",
     "barcode": "5601312877363",
     "category": "Legumes Bio",
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
-    "updatedAt": "2026-11-07T00:00:00.000Z"
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-7995537",
@@ -9219,6 +9316,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-8296631",
+    "sku": "8296631",
+    "description": "PIMENTO PALERMO BIO ALMAVERDE 150 G",
+    "unit": "EA",
+    "barcode": "8437014524109",
+    "category": "Legumes Bio",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-7382502",
@@ -9507,6 +9615,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "updatedAt": "2026-11-07T00:00:00.000Z"
   },
   {
+    "id": "art-5574979",
+    "sku": "5574979",
+    "description": "RABANETE S/RAMA BIO CNT 250 G",
+    "unit": "EA",
+    "barcode": "5601312218203",
+    "category": "Legumes Bio",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
+  },
+  {
     "id": "art-7472966",
     "sku": "7472966",
     "description": "WAKAME SECA 30G BIO",
@@ -9780,6 +9899,17 @@ export const FULL_SECTION_ARTICLES: Article[] = [
     "active": true,
     "createdAt": "2026-11-07T00:00:00.000Z",
     "updatedAt": "2026-11-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-9046279",
+    "sku": "9046279",
+    "description": "MANJERICÃO ROXO BIO VASO UN",
+    "unit": "EA",
+    "barcode": "5601312190035",
+    "category": "Especialidades Bio",
+    "active": true,
+    "createdAt": "2026-11-19T20:40:00.000Z",
+    "updatedAt": "2026-11-19T20:40:00.000Z"
   },
   {
     "id": "art-5562823",

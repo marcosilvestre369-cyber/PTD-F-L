@@ -31,6 +31,9 @@ import {
 import {
   INITIAL_COLLABORATORS,
   INITIAL_ARTICLES,
+  CATALOG_VERSION,
+  CATALOG_UPDATED_AT,
+  REMOVED_CATALOG_IDS,
 } from './initialData.ts';
 import {
   syncAllToFirestore,
@@ -135,6 +138,7 @@ function normalizePdeStatus(raw: string | undefined): PdeStatus {
 }
 
 interface AppStore {
+  catalogVersion?: string;
   collaborators: Collaborator[];
   articles: Article[];
   tasks: DailyTask[];
@@ -243,15 +247,15 @@ class StorageManager {
           }
         });
 
-        // Atualizar catálogo oficial completo com os 956 artigos dos 6 ficheiros de Barcode
-        if (this.store.articles.length < 500) {
-          this.store.articles = [...INITIAL_ARTICLES];
+        // Reconciliar catálogo oficial com a versão mais recente extraída dos 6 ficheiros PDF de Barcode (19-11-2026)
+        const catalogStats = this.reconcileOfficialCatalog();
+        if (catalogStats.changed) {
           this.logAudit(
             'SISTEMA',
             'Catálogo',
             'ATUALIZAR_CATALOGO',
             'Catálogo',
-            `Catálogo atualizado com os 956 artigos oficiais extraídos dos 6 ficheiros PDF de Barcode da secção`
+            `Catálogo atualizado (${CATALOG_VERSION}): ${this.store.articles.length} artigos (${catalogStats.added} adicionados, ${catalogStats.updated} atualizados, ${catalogStats.removed} removidos)`
           );
         }
 
@@ -263,6 +267,7 @@ class StorageManager {
         const initialCollaborators = [...INITIAL_COLLABORATORS];
 
         this.store = {
+          catalogVersion: CATALOG_VERSION,
           collaborators: initialCollaborators,
           articles: [...INITIAL_ARTICLES],
           tasks: [],
@@ -305,13 +310,82 @@ class StorageManager {
     }
   }
 
+  private reconcileOfficialCatalog(): { changed: boolean; added: number; updated: number; removed: number } {
+    const removedSet = new Set(REMOVED_CATALOG_IDS);
+    const officialMap = new Map(INITIAL_ARTICLES.map(a => [a.id, a]));
+    const currentMap = new Map(this.store.articles.map(a => [a.id, a]));
+
+    let added = 0;
+    let updated = 0;
+    let removed = 0;
+    let changed = this.store.catalogVersion !== CATALOG_VERSION;
+
+    // 1. Adicionar novos artigos e atualizar alterações oficiais (sem sobrepor edições manuais posteriores)
+    const orderedResult: Article[] = [];
+    for (const official of INITIAL_ARTICLES) {
+      const existing = currentMap.get(official.id);
+      if (!existing) {
+        orderedResult.push({ ...official });
+        added++;
+        changed = true;
+      } else {
+        const isManuallyEditedAfterCatalog = (existing.updatedAt || '') > CATALOG_UPDATED_AT;
+        const differs =
+          existing.sku !== official.sku ||
+          existing.description !== official.description ||
+          existing.unit !== official.unit ||
+          existing.barcode !== official.barcode ||
+          existing.category !== official.category;
+
+        if (!isManuallyEditedAfterCatalog && (differs || (existing.updatedAt || '') < official.updatedAt)) {
+          orderedResult.push({
+            ...existing,
+            sku: official.sku,
+            description: official.description,
+            unit: official.unit,
+            barcode: official.barcode,
+            category: official.category,
+            updatedAt: official.updatedAt,
+          });
+          if (differs) {
+            updated++;
+          }
+          changed = true;
+        } else {
+          orderedResult.push(existing);
+        }
+      }
+    }
+
+    // 2. Preservar artigos personalizados criados manualmente e remover artigos descontinuados dos PDFs
+    for (const existing of this.store.articles) {
+      if (officialMap.has(existing.id)) continue;
+      if (removedSet.has(existing.id) && (existing.updatedAt || '') <= CATALOG_UPDATED_AT) {
+        removed++;
+        changed = true;
+        continue;
+      }
+      orderedResult.push(existing);
+    }
+
+    if (changed) {
+      this.store.articles = orderedResult;
+      this.store.catalogVersion = CATALOG_VERSION;
+    }
+
+    return { changed, added, updated, removed };
+  }
+
   private async hydrateFromFirestore(): Promise<void> {
-    let remoteArticlesCount = 0;
+    let remoteArticlesMap = new Map<string, Article>();
+    let hasRemoteSnapshot = false;
     try {
       const remote = await loadAllFromFirestore();
       if (remote) {
+        hasRemoteSnapshot = true;
         let changed = false;
-        remoteArticlesCount = remote.articles?.length || 0;
+        const removedSet = new Set(REMOVED_CATALOG_IDS);
+        remoteArticlesMap = new Map((remote.articles || []).map(a => [a.id, a]));
 
         // 1. Colaboradores (preservar edições/adições/remoções guardadas na nuvem)
         if (remote.collaborators && remote.collaborators.length > 0) {
@@ -339,16 +413,20 @@ class StorageManager {
           changed = true;
         }
 
-        // 2. Artigos do catálogo
+        // 2. Artigos do catálogo (preservar edições manuais posteriores, sem deixar a nuvem antiga reverter o catálogo 2026-11-19)
         if (remote.articles && remote.articles.length > 0) {
           const artMap = new Map(this.store.articles.map(a => [a.id, a]));
           for (const ra of remote.articles) {
+            if (removedSet.has(ra.id) && (ra.updatedAt || '') <= CATALOG_UPDATED_AT) {
+              continue;
+            }
             const local = artMap.get(ra.id);
-            if (!local || (ra.updatedAt || '') >= (local.updatedAt || '')) {
+            if (!local || (ra.updatedAt || '') > (local.updatedAt || '')) {
               artMap.set(ra.id, ra);
             }
           }
           this.store.articles = Array.from(artMap.values());
+          this.reconcileOfficialCatalog();
           changed = true;
         }
 
@@ -447,10 +525,44 @@ class StorageManager {
       console.warn('[Storage] Erro ao sincronizar a partir do Firestore:', err);
     }
 
-    // Garantir que dados locais (ou catálogo inicial) fiquem sincronizados no Firestore
-    syncAllToFirestore(this.store, {
-      includeArticles: remoteArticlesCount < this.store.articles.length,
-    }).catch(err => {
+    // Sincronizar diferenças do catálogo com o Firestore (apenas novos/atualizados/removidos)
+    const syncCatalogDeltaToFirestore = async () => {
+      if (!hasRemoteSnapshot) {
+        await syncAllToFirestore(this.store, { includeArticles: false });
+        return;
+      }
+
+      const localArtMap = new Map(this.store.articles.map(a => [a.id, a]));
+      const articlesToUpsert = this.store.articles.filter(localArt => {
+        const remoteArt = remoteArticlesMap.get(localArt.id);
+        if (!remoteArt) return true;
+        return (
+          remoteArt.sku !== localArt.sku ||
+          remoteArt.description !== localArt.description ||
+          remoteArt.unit !== localArt.unit ||
+          remoteArt.barcode !== localArt.barcode ||
+          remoteArt.category !== localArt.category ||
+          remoteArt.active !== localArt.active
+        );
+      });
+
+      const articleIdsToDelete = REMOVED_CATALOG_IDS.filter(
+        id => remoteArticlesMap.has(id) && !localArtMap.has(id)
+      );
+
+      if (articlesToUpsert.length > 0) {
+        await syncDocumentsBatch('articles', articlesToUpsert);
+        console.log(`[Firebase] Catálogo sincronizado: ${articlesToUpsert.length} artigos adicionados/atualizados.`);
+      }
+      if (articleIdsToDelete.length > 0) {
+        await deleteDocumentsBatch('articles', articleIdsToDelete);
+        console.log(`[Firebase] Catálogo sincronizado: ${articleIdsToDelete.length} artigos descontinuados removidos.`);
+      }
+
+      await syncAllToFirestore(this.store, { includeArticles: false });
+    };
+
+    syncCatalogDeltaToFirestore().catch(err => {
       console.warn('[Firebase] Erro ao sincronizar com Firestore:', err);
     });
   }

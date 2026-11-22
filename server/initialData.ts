@@ -204,9 +204,16 @@ export const INITIAL_COLLABORATORS: Collaborator[] = [
   },
 ];
 
-import { FULL_SECTION_ARTICLES } from './catalogData.ts';
+import {
+  FULL_SECTION_ARTICLES,
+  CATALOG_VERSION,
+  CATALOG_UPDATED_AT,
+  REMOVED_CATALOG_IDS,
+} from './catalogData.ts';
 
-// Artigos do catálogo oficial da secção (956 artigos únicos extraídos dos ficheiros oficiais)
+export { CATALOG_VERSION, CATALOG_UPDATED_AT, REMOVED_CATALOG_IDS };
+
+// Artigos do catálogo oficial da secção (966 artigos únicos extraídos dos ficheiros oficiais de 19-11-2026)
 export const INITIAL_ARTICLES: Article[] = FULL_SECTION_ARTICLES;
 
 
