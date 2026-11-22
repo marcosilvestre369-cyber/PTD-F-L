@@ -589,9 +589,9 @@ class StorageManager {
     const newTasks: DailyTask[] = [];
     const newMeals: MealSchedule[] = [];
 
-    // Colaboradores da secção (excluindo administradores e gestores stocks & pde)
+    // Colaboradores da secção (excluindo administradores, admin 2 e gestores stocks & pde)
     const workers = this.store.collaborators.filter(
-      c => c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
+      c => c.role !== 'ADMIN' && c.role !== 'ADMIN_2' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
     );
 
     nextWeekDates.forEach((date, dayIdx) => {
@@ -1068,7 +1068,9 @@ class StorageManager {
   private isExcludedFromTasks(mecanographicNumber: string): boolean {
     if (mecanographicNumber === '56359') return true;
     const colab = this.store.collaborators.find(c => c.mecanographicNumber === mecanographicNumber);
-    return Boolean(colab && (colab.role === 'ADMIN' || colab.role === 'GESTOR_STOCKS_PDE'));
+    return Boolean(
+      colab && (colab.role === 'ADMIN' || colab.role === 'ADMIN_2' || colab.role === 'GESTOR_STOCKS_PDE')
+    );
   }
 
   // --- Tarefas diárias ---
@@ -1093,10 +1095,10 @@ class StorageManager {
   ): { success: boolean; error?: string; task?: DailyTask } {
     const colab = this.getCollaboratorByNumber(collaboratorNumber);
     if (!colab) return { success: false, error: 'Colaborador não encontrado.' };
-    if (colab.role === 'ADMIN' || colab.role === 'GESTOR_STOCKS_PDE') {
+    if (colab.role === 'ADMIN' || colab.role === 'ADMIN_2' || colab.role === 'GESTOR_STOCKS_PDE') {
       return {
         success: false,
-        error: 'Não é permitido atribuir tarefas a perfis de Administrador ou Gestor Stocks & PDE.',
+        error: 'Não é permitido atribuir tarefas a perfis de Administrador, Administrador 2 ou Gestor Stocks & PDE.',
       };
     }
     if (!description.trim()) return { success: false, error: 'Descrição da tarefa obrigatória.' };
@@ -1207,7 +1209,7 @@ class StorageManager {
     const task = this.store.tasks.find(t => t.id === taskId);
     if (!task) return { success: false, error: 'Tarefa não encontrada.' };
 
-    if (user.role !== 'ADMIN') {
+    if (user.role !== 'ADMIN' && user.role !== 'ADMIN_2') {
       return { success: false, error: 'Apenas administradores podem editar tarefas.' };
     }
 
@@ -1240,7 +1242,7 @@ class StorageManager {
     if (index === -1) return { success: false, error: 'Tarefa não encontrada.' };
     const task = this.store.tasks[index];
 
-    if (user.role !== 'ADMIN') {
+    if (user.role !== 'ADMIN' && user.role !== 'ADMIN_2') {
       return { success: false, error: 'Apenas administradores podem remover tarefas.' };
     }
 
@@ -1335,7 +1337,7 @@ class StorageManager {
 
   public getAllShiftsForDate(date: string): ShiftStatusInfo[] {
     const workers = this.store.collaborators.filter(
-      c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE'
+      c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'ADMIN_2' && c.role !== 'GESTOR_STOCKS_PDE'
     );
     return workers.map(w => this.getShiftStatus(date, w.mecanographicNumber));
   }
@@ -1798,7 +1800,7 @@ class StorageManager {
       t => matchesPeriod(t.date) && !this.isExcludedFromTasks(t.mecanographicNumber)
     );
     const activeCollaborators = this.store.collaborators.filter(
-      c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE'
+      c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'ADMIN_2' && c.role !== 'GESTOR_STOCKS_PDE'
     );
 
     const colabMap = new Map<string, {
@@ -2156,7 +2158,7 @@ class StorageManager {
   public getStatistics(): DailyStatistic[] {
     const dates = this.getAvailableDates().map(d => d.date);
     const activeWorkers = this.store.collaborators.filter(
-      c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE'
+      c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'ADMIN_2' && c.role !== 'GESTOR_STOCKS_PDE'
     ).length;
 
     return dates.map(date => {

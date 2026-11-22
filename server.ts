@@ -363,7 +363,7 @@ app.get('/api/tasks/performance', authenticateToken, limited((req, res) => {
   return res.json(perf);
 }, { label: 'tasks:performance' }));
 
-app.post('/api/tasks/additional', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
+app.post('/api/tasks/additional', authenticateToken, requireRole(['ADMIN', 'ADMIN_2']), limited((req, res) => {
   const { collaboratorNumber, date, description, time, ipaPoints } = req.body;
   const result = storage.addAdditionalTask(collaboratorNumber, date, description, time, req.user!, ipaPoints);
   if (!result.success) {
@@ -385,7 +385,7 @@ app.patch('/api/tasks/:id/status', authenticateToken, limited((req, res) => {
   return res.json(result.task);
 }, { label: 'tasks:update-status' }));
 
-app.patch('/api/tasks/:id', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
+app.patch('/api/tasks/:id', authenticateToken, requireRole(['ADMIN', 'ADMIN_2']), limited((req, res) => {
   const { description, time, ipaPoints } = req.body;
   const result = storage.updateTaskDetails(req.params.id, { description, time, ipaPoints }, req.user!);
   if (!result.success) {
@@ -394,7 +394,7 @@ app.patch('/api/tasks/:id', authenticateToken, requireRole(['ADMIN']), limited((
   return res.json(result.task);
 }, { label: 'tasks:update' }));
 
-app.delete('/api/tasks/:id', authenticateToken, requireRole(['ADMIN']), limited((req, res) => {
+app.delete('/api/tasks/:id', authenticateToken, requireRole(['ADMIN', 'ADMIN_2']), limited((req, res) => {
   const result = storage.deleteTask(req.params.id, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });

@@ -475,8 +475,8 @@ export function parseScheduleFile(
           isMatched: true,
         });
 
-        // Requisito: Administradores e Gestores de Stocks & PDE não estão presentes nas tarefas operacionais
-        if (colab.role !== 'ADMIN' && colab.role !== 'GESTOR_STOCKS_PDE') {
+        // Requisito: Administradores, Administrador 2 e Gestores de Stocks & PDE não estão presentes nas tarefas operacionais
+        if (colab.role !== 'ADMIN' && colab.role !== 'ADMIN_2' && colab.role !== 'GESTOR_STOCKS_PDE') {
           generatedTasks.push({
             id: taskId,
             collaboratorId: colab.id,
@@ -512,7 +512,7 @@ export function parseScheduleFile(
           if (rawName === 'TODOS') {
             // Atribuir a todos os colaboradores de loja em funções ativas nesse dia (excluindo administradores e colaboradores de folga/férias)
             collaborators
-              .filter(c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE')
+              .filter(c => c.status === 'ATIVO' && c.role !== 'ADMIN' && c.role !== 'ADMIN_2' && c.role !== 'GESTOR_STOCKS_PDE')
               .forEach(colab => {
                 const ptdDay = PTD_RAW_DATA[colab.name]?.[dateStr];
                 const isOffOrVacation = ptdDay?.task === 'FOLGA' || ptdDay?.task === 'FÉRIAS' || !ptdDay?.task;
@@ -561,8 +561,8 @@ export function parseScheduleFile(
               continue;
             }
 
-            // Apenas adicionar se não for administrador nem gestor stocks & pde
-            if (colab.role !== 'ADMIN' && colab.role !== 'GESTOR_STOCKS_PDE') {
+            // Apenas adicionar se não for administrador, admin 2 nem gestor stocks & pde
+            if (colab.role !== 'ADMIN' && colab.role !== 'ADMIN_2' && colab.role !== 'GESTOR_STOCKS_PDE') {
               const taskId = `task-pts-${item.task.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${colab.mecanographicNumber}-${dateStr}`;
               generatedTasks.push({
                 id: taskId,

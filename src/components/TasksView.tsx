@@ -46,8 +46,8 @@ function formatIpaNumber(val: number): string {
 export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate }) => {
   const isAdmin = currentUser.role === 'ADMIN';
   const canViewAll = isAdmin || currentUser.role === 'ADMIN_2';
-  const canAssignTasks = isAdmin;
-  const canEditTasks = isAdmin;
+  const canAssignTasks = canViewAll;
+  const canEditTasks = canViewAll;
 
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [meal, setMeal] = useState<MealSchedule | null>(null);
@@ -101,9 +101,9 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Filtrar apenas colaboradores de secção (Administradores e Gestores Stocks & PDE estão excluídos da lista de tarefas)
+  // Filtrar apenas colaboradores de secção (Administradores, Administrador 2 e Gestores Stocks & PDE estão excluídos da lista de tarefas)
   const workerCollaborators = collaborators.filter(
-    c => c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
+    c => c.role !== 'ADMIN' && c.role !== 'ADMIN_2' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
   );
 
   useEffect(() => {
@@ -112,7 +112,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
     api.getCollaborators(controller.signal)
       .then(list => {
         const workers = list.filter(
-          c => c.role !== 'ADMIN' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
+          c => c.role !== 'ADMIN' && c.role !== 'ADMIN_2' && c.role !== 'GESTOR_STOCKS_PDE' && c.status === 'ATIVO'
         );
         setCollaborators(list);
         if (workers.length > 0 && !addColabNumber) {
@@ -324,7 +324,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
     const isSaving = savingTaskId === task.id;
     const feedback = saveFeedback?.id === task.id ? saveFeedback : null;
     const canAnswer = canViewAll || task.mecanographicNumber === currentUser.mecanographicNumber;
-    const canEdit = canEditTasks; // Apenas Administrador principal pode editar ou apagar tarefas
+    const canEdit = canEditTasks; // Administrador e Administrador 2 podem editar ou apagar tarefas
 
     return (
       <div
@@ -581,7 +581,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
             </div>
           )}
 
-          {/* Atribuir Tarefa (Estritamente apenas Administrador principal) */}
+          {/* Atribuir Tarefa (Administrador e Administrador 2) */}
           {canAssignTasks && (
             <button
               onClick={() => {

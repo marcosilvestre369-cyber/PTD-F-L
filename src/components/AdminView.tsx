@@ -170,7 +170,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
     if (c.role === targetRole) return;
     const roleLabels: Record<Role, string> = {
       ADMIN: 'Administrador (Gestão Global)',
-      ADMIN_2: 'Administrador 2 (Sem Administração nem Atribuir Tarefas)',
+      ADMIN_2: 'Administrador 2 (Acesso total exceto Administração)',
       GESTOR_STOCKS_PDE: 'Gestor Stocks & PDE (Exclusivo Stocks e PDE)',
       COLABORADOR: 'Colaborador (Tarefas, Stocks e PDE)',
     };
@@ -670,7 +670,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onWeekAdded }) => {
                 >
                   <option value="COLABORADOR">Colaborador (Tarefas, Stocks e PDE)</option>
                   <option value="GESTOR_STOCKS_PDE">Gestor Stocks & PDE (Exclusivo Stocks e PDE com decisão)</option>
-                  <option value="ADMIN_2">Administrador 2 (Todas as abas exceto Administração, sem atribuir tarefas)</option>
+                  <option value="ADMIN_2">Administrador 2 (Mesmos privilégios de Administrador, exceto Administração)</option>
                   <option value="ADMIN">Administrador (Gestão Global)</option>
                 </select>
               </div>
