@@ -125,6 +125,29 @@ export function getCollaboratorVisibleWeekWindow(now: Date = new Date()) {
   };
 }
 
+/**
+ * Colaboradores só podem alterar o estado das tarefas de um dia até às 02:00 (hora de Lisboa) do dia seguinte.
+ * A partir das 02:00 do dia seguinte, o estado fica bloqueado para colaboradores.
+ */
+export function isTaskStatusLockedForCollaborator(taskDate: string, now: Date = new Date()): boolean {
+  if (!taskDate || !/^\d{4}-\d{2}-\d{2}$/.test(taskDate)) return false;
+  const [y, m, d] = taskDate.split('-').map(Number);
+  const nextDayStr = new Date(Date.UTC(y, m - 1, d) + 86400000).toISOString().split('T')[0];
+  const lisbon = getLisbonDateTimeParts(now);
+
+  if (lisbon.dateStr > nextDayStr) return true;
+  if (lisbon.dateStr === nextDayStr && lisbon.hour >= 2) return true;
+  return false;
+}
+
+/**
+ * Início oficial de utilização da aplicação: 23/11/2026 (00:00 hora de Lisboa = WET UTC+0).
+ * Todos os processos abertos e registos de teste anteriores a esta data são limpos
+ * e a contagem do IPA inicia a zero a partir de 23/11/2026.
+ */
+export const OFFICIAL_LAUNCH_DATE = '2026-11-23';
+export const OFFICIAL_LAUNCH_CUTOFF_ISO = '2026-11-23T00:00:00.000Z';
+
 function normalizeStockStatus(raw: string | undefined): StockStatus {
   if (raw === 'TRATADO' || raw === 'RESOLVIDO') return 'TRATADO';
   if (raw === 'NAO_CONSIDERADO') return 'NAO_CONSIDERADO';
@@ -139,6 +162,7 @@ function normalizePdeStatus(raw: string | undefined): PdeStatus {
 
 interface AppStore {
   catalogVersion?: string;
+  officialLaunchResetApplied?: string;
   collaborators: Collaborator[];
   articles: Article[];
   tasks: DailyTask[];
@@ -259,6 +283,18 @@ class StorageManager {
           );
         }
 
+        // Reset oficial pré-arranque (23/11/2026): limpa processos anteriores e repõe IPA a zero
+        const launchReset = this.applyOfficialLaunchReset();
+        if (launchReset.changed) {
+          this.logAudit(
+            'SISTEMA',
+            'Início Oficial',
+            'RESET_INICIO_OFICIAL',
+            'Sistema',
+            `Reset oficial para arranque em ${OFFICIAL_LAUNCH_DATE}: ${launchReset.deletedStockIds.length} stocks, ${launchReset.deletedPdeIds.length} PDEs, ${launchReset.deletedTaskIds.length} tarefas anteriores e ${launchReset.resetTaskCount} estados de teste limpos; IPA reposto a zero.`
+          );
+        }
+
         this.normalizeImportPrecedence();
         this.hadLocalStore = true;
         this.save();
@@ -268,6 +304,7 @@ class StorageManager {
 
         this.store = {
           catalogVersion: CATALOG_VERSION,
+          officialLaunchResetApplied: OFFICIAL_LAUNCH_DATE,
           collaborators: initialCollaborators,
           articles: [...INITIAL_ARTICLES],
           tasks: [],
@@ -376,9 +413,148 @@ class StorageManager {
     return { changed, added, updated, removed };
   }
 
+  /**
+   * Remove todos os processos de teste e registos anteriores ao arranque oficial (23/11/2026)
+   * e repõe a estado inicial quaisquer tarefas de >= 23/11/2026 marcadas em testes antes do arranque.
+   * Preserva integralmente colaboradores, catálogo oficial e escalas já importadas para >= 23/11/2026.
+   */
+  private applyOfficialLaunchReset(): {
+    changed: boolean;
+    deletedTaskIds: string[];
+    deletedMealIds: string[];
+    deletedStockIds: string[];
+    deletedPdeIds: string[];
+    deletedNotificationIds: string[];
+    deletedImportIds: string[];
+    deletedAuditIds: string[];
+    resetTasks: DailyTask[];
+    resetTaskCount: number;
+  } {
+    const deletedTaskIds: string[] = [];
+    const deletedMealIds: string[] = [];
+    const deletedStockIds: string[] = [];
+    const deletedPdeIds: string[] = [];
+    const deletedNotificationIds: string[] = [];
+    const deletedImportIds: string[] = [];
+    const deletedAuditIds: string[] = [];
+    const resetTasks: DailyTask[] = [];
+
+    let changed = this.store.officialLaunchResetApplied !== OFFICIAL_LAUNCH_DATE;
+
+    // 1. Limpar todos os processos de Stocks criados antes de 23/11/2026
+    this.store.stocks = (this.store.stocks || []).filter(s => {
+      const isPreLaunch = s.createdAt
+        ? s.createdAt < OFFICIAL_LAUNCH_CUTOFF_ISO
+        : (s.registrationDate || '') < OFFICIAL_LAUNCH_DATE;
+      if (isPreLaunch) {
+        deletedStockIds.push(s.id);
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    // 2. Limpar todos os processos de PDE submetidos antes de 23/11/2026
+    this.store.pdes = (this.store.pdes || []).filter(p => {
+      const isPreLaunch = !p.submittedAt || p.submittedAt < OFFICIAL_LAUNCH_CUTOFF_ISO;
+      if (isPreLaunch) {
+        deletedPdeIds.push(p.id);
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    // 3. Limpar tarefas anteriores a 23/11/2026 e repor tarefas >= 23/11/2026 respondidas em teste antes de 23/11/2026
+    this.store.tasks = (this.store.tasks || []).filter(t => {
+      if ((t.date || '') < OFFICIAL_LAUNCH_DATE) {
+        deletedTaskIds.push(t.id);
+        changed = true;
+        return false;
+      }
+      const answeredBeforeLaunch =
+        t.status !== 'POR_ASSINALAR' && (!t.answeredAt || t.answeredAt < OFFICIAL_LAUNCH_CUTOFF_ISO);
+      const hasPreLaunchHistory =
+        Array.isArray(t.history) &&
+        t.history.length > 0 &&
+        t.history.every(h => !h.answeredAt || h.answeredAt < OFFICIAL_LAUNCH_CUTOFF_ISO);
+      if (answeredBeforeLaunch || hasPreLaunchHistory) {
+        t.status = 'POR_ASSINALAR';
+        t.observation = undefined;
+        t.answeredAt = undefined;
+        t.answeredBy = undefined;
+        t.history = [];
+        resetTasks.push(t);
+        changed = true;
+      }
+      return true;
+    });
+
+    // 4. Limpar refeições anteriores a 23/11/2026
+    this.store.meals = (this.store.meals || []).filter(m => {
+      if ((m.date || '') < OFFICIAL_LAUNCH_DATE) {
+        deletedMealIds.push(m.id);
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    // 5. Limpar notificações anteriores a 23/11/2026
+    this.store.notifications = (this.store.notifications || []).filter(n => {
+      if (!n.createdAt || n.createdAt < OFFICIAL_LAUNCH_CUTOFF_ISO) {
+        deletedNotificationIds.push(n.id);
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    // 6. Limpar importações exclusivamente anteriores a 23/11/2026 (preservar importações da semana de 23/11 em diante)
+    this.store.imports = (this.store.imports || []).filter(imp => {
+      const dates = (imp.rows || []).map(r => r.date).filter((d): d is string => Boolean(d));
+      const hasOfficialDate = dates.some(d => d >= OFFICIAL_LAUNCH_DATE);
+      if (hasOfficialDate) return true;
+      const isPreLaunch = dates.length > 0 || !imp.uploadedAt || imp.uploadedAt < OFFICIAL_LAUNCH_CUTOFF_ISO;
+      if (isPreLaunch) {
+        deletedImportIds.push(imp.id);
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    // 7. Limpar registos de auditoria de testes anteriores a 23/11/2026 (mantendo registo de arranque/reset)
+    this.store.audits = (this.store.audits || []).filter(a => {
+      if (a.action === 'RESET_INICIO_OFICIAL' || a.id === 'audit-init') return true;
+      if (a.timestamp && a.timestamp < OFFICIAL_LAUNCH_CUTOFF_ISO) {
+        deletedAuditIds.push(a.id);
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    this.store.officialLaunchResetApplied = OFFICIAL_LAUNCH_DATE;
+
+    return {
+      changed,
+      deletedTaskIds,
+      deletedMealIds,
+      deletedStockIds,
+      deletedPdeIds,
+      deletedNotificationIds,
+      deletedImportIds,
+      deletedAuditIds,
+      resetTasks,
+      resetTaskCount: resetTasks.length,
+    };
+  }
+
   private async hydrateFromFirestore(): Promise<void> {
     let remoteArticlesMap = new Map<string, Article>();
     let hasRemoteSnapshot = false;
+    let remoteLaunchCleanup: ReturnType<StorageManager['applyOfficialLaunchReset']> | null = null;
     try {
       const remote = await loadAllFromFirestore();
       if (remote) {
@@ -516,6 +692,29 @@ class StorageManager {
           await deleteDocument('collaborators', 'colab-56813');
         }
 
+        // Aplicar reset oficial de pré-arranque (23/11/2026) também sobre os dados vindos do Firestore
+        remoteLaunchCleanup = this.applyOfficialLaunchReset();
+        if (remoteLaunchCleanup.changed) {
+          const totalPurged =
+            remoteLaunchCleanup.deletedStockIds.length +
+            remoteLaunchCleanup.deletedPdeIds.length +
+            remoteLaunchCleanup.deletedTaskIds.length +
+            remoteLaunchCleanup.deletedMealIds.length +
+            remoteLaunchCleanup.deletedNotificationIds.length +
+            remoteLaunchCleanup.deletedImportIds.length +
+            remoteLaunchCleanup.resetTaskCount;
+          if (totalPurged > 0) {
+            this.logAudit(
+              'SISTEMA',
+              'Início Oficial',
+              'RESET_INICIO_OFICIAL',
+              'Sistema',
+              `Limpeza na nuvem concluída para arranque oficial em ${OFFICIAL_LAUNCH_DATE}: ${remoteLaunchCleanup.deletedStockIds.length} stocks, ${remoteLaunchCleanup.deletedPdeIds.length} PDEs, ${remoteLaunchCleanup.deletedTaskIds.length} tarefas anteriores e ${remoteLaunchCleanup.resetTaskCount} estados de teste limpos.`
+            );
+          }
+          changed = true;
+        }
+
         if (changed) {
           this.save();
           console.log('[Storage] Base de dados hidratada com sucesso a partir do Firestore.');
@@ -525,8 +724,35 @@ class StorageManager {
       console.warn('[Storage] Erro ao sincronizar a partir do Firestore:', err);
     }
 
-    // Sincronizar diferenças do catálogo com o Firestore (apenas novos/atualizados/removidos)
+    // Sincronizar diferenças do catálogo e limpeza oficial com o Firestore
     const syncCatalogDeltaToFirestore = async () => {
+      if (remoteLaunchCleanup) {
+        if (remoteLaunchCleanup.deletedStockIds.length > 0) {
+          await deleteDocumentsBatch('stocks', remoteLaunchCleanup.deletedStockIds);
+        }
+        if (remoteLaunchCleanup.deletedPdeIds.length > 0) {
+          await deleteDocumentsBatch('pdes', remoteLaunchCleanup.deletedPdeIds);
+        }
+        if (remoteLaunchCleanup.deletedTaskIds.length > 0) {
+          await deleteDocumentsBatch('tasks', remoteLaunchCleanup.deletedTaskIds);
+        }
+        if (remoteLaunchCleanup.deletedMealIds.length > 0) {
+          await deleteDocumentsBatch('meals', remoteLaunchCleanup.deletedMealIds);
+        }
+        if (remoteLaunchCleanup.deletedNotificationIds.length > 0) {
+          await deleteDocumentsBatch('notifications', remoteLaunchCleanup.deletedNotificationIds);
+        }
+        if (remoteLaunchCleanup.deletedImportIds.length > 0) {
+          await deleteDocumentsBatch('imports', remoteLaunchCleanup.deletedImportIds);
+        }
+        if (remoteLaunchCleanup.deletedAuditIds.length > 0) {
+          await deleteDocumentsBatch('audits', remoteLaunchCleanup.deletedAuditIds);
+        }
+        if (remoteLaunchCleanup.resetTasks.length > 0) {
+          await syncDocumentsBatch('tasks', remoteLaunchCleanup.resetTasks);
+        }
+      }
+
       if (!hasRemoteSnapshot) {
         await syncAllToFirestore(this.store, { includeArticles: false });
         return;
@@ -1215,6 +1441,12 @@ class StorageManager {
     }
     if (!description.trim()) return { success: false, error: 'Descrição da tarefa obrigatória.' };
     if (!date) return { success: false, error: 'Data obrigatória.' };
+    if (author.role !== 'ADMIN' && isTaskStatusLockedForCollaborator(date)) {
+      return {
+        success: false,
+        error: 'O prazo para atribuir ou alterar tarefas deste dia terminou às 02:00 do dia seguinte. Apenas o Administrador pode efetuar correções.',
+      };
+    }
 
     const sanitizedIpa = sanitizeTaskIpaPoints(ipaPoints);
     if (!sanitizedIpa.valid) {
@@ -1284,12 +1516,17 @@ class StorageManager {
     const task = this.store.tasks.find(t => t.id === taskId);
     if (!task) return { success: false, error: 'Tarefa não encontrada.' };
 
-    if (
-      user.role !== 'ADMIN' &&
-      user.role !== 'ADMIN_2' &&
-      task.mecanographicNumber !== user.mecanographicNumber
-    ) {
+    const isAdmin = user.role === 'ADMIN';
+    const canManageTasks = isAdmin || user.role === 'ADMIN_2';
+    if (!canManageTasks && task.mecanographicNumber !== user.mecanographicNumber) {
       return { success: false, error: 'Sem permissão para alterar tarefas de outro colaborador.' };
+    }
+
+    if (!isAdmin && isTaskStatusLockedForCollaborator(task.date)) {
+      return {
+        success: false,
+        error: 'O prazo para alterar o estado das tarefas deste dia terminou às 02:00 do dia seguinte. Apenas o Administrador pode efetuar correções.',
+      };
     }
 
     const previousStatus = task.status;
@@ -1325,6 +1562,13 @@ class StorageManager {
       return { success: false, error: 'Apenas administradores podem editar tarefas.' };
     }
 
+    if (user.role !== 'ADMIN' && isTaskStatusLockedForCollaborator(task.date)) {
+      return {
+        success: false,
+        error: 'O prazo para alterar tarefas deste dia terminou às 02:00 do dia seguinte. Apenas o Administrador pode efetuar correções.',
+      };
+    }
+
     if (data.ipaPoints !== undefined) {
       const sanitizedIpa = sanitizeTaskIpaPoints(data.ipaPoints);
       if (!sanitizedIpa.valid) {
@@ -1356,6 +1600,13 @@ class StorageManager {
 
     if (user.role !== 'ADMIN' && user.role !== 'ADMIN_2') {
       return { success: false, error: 'Apenas administradores podem remover tarefas.' };
+    }
+
+    if (user.role !== 'ADMIN' && isTaskStatusLockedForCollaborator(task.date)) {
+      return {
+        success: false,
+        error: 'O prazo para alterar tarefas deste dia terminou às 02:00 do dia seguinte. Apenas o Administrador pode efetuar correções.',
+      };
     }
 
     this.store.tasks.splice(index, 1);
@@ -2804,9 +3055,12 @@ class StorageManager {
     const numericYear = parseInt(year, 10) || undefined;
     const todayLisbonStr = getLisbonDateTimeParts().dateStr;
 
-    // 4.1: Tarefas do ano (reset anual automático no final de cada ano por prefixo YYYY-)
+    // 4.1: Tarefas do ano a partir do início oficial (23/11/2026) — reset anual automático por prefixo YYYY-
     const yearTasks = (this.store.tasks || []).filter(
-      t => t.mecanographicNumber === mecanographicNumber && t.date.startsWith(yearPrefix)
+      t =>
+        t.mecanographicNumber === mecanographicNumber &&
+        t.date.startsWith(yearPrefix) &&
+        t.date >= OFFICIAL_LAUNCH_DATE
     );
     const taskTotalCount = yearTasks.length;
     let taskCompletedCount = 0;
@@ -2888,12 +3142,13 @@ class StorageManager {
         weeklyOver95Points
     );
 
-    // 4.5: Excesso de stock ou rotura/revisão (+0,1 ponto registo, +0,4 pontos se tratado)
+    // 4.5: Excesso de stock ou rotura/revisão (+0,1 ponto registo, +0,4 pontos se tratado) — a partir de 23/11/2026
     const yearStocks = (this.store.stocks || []).filter(s => {
       if (s.type !== 'EXCESSO' && s.type !== 'ROTURA') return false;
       if (s.authorNumber !== mecanographicNumber) return false;
-      const dateRef = s.registrationDate || s.createdAt || '';
-      return dateRef.startsWith(yearPrefix);
+      if (s.createdAt && s.createdAt < OFFICIAL_LAUNCH_CUTOFF_ISO) return false;
+      const dateRef = s.registrationDate || (s.createdAt ? s.createdAt.slice(0, 10) : '');
+      return dateRef.startsWith(yearPrefix) && dateRef >= OFFICIAL_LAUNCH_DATE;
     });
     const stockAddedCount = yearStocks.length;
     const stockAddedPoints = roundIpa(stockAddedCount * 0.1);
@@ -2903,11 +3158,12 @@ class StorageManager {
     const stockTreatedPoints = roundIpa(stockTreatedCount * 0.4);
     const stockNetPoints = roundIpa(stockAddedPoints + stockTreatedPoints);
 
-    // 4.6: Pedido de PDE (+0,3 pontos registo, +0,7 pontos se resolvido)
+    // 4.6: Pedido de PDE (+0,3 pontos registo, +0,7 pontos se resolvido) — a partir de 23/11/2026
     const yearPdes = (this.store.pdes || []).filter(p => {
       if (p.submittedByNumber !== mecanographicNumber) return false;
-      const dateRef = p.arrivalDate || p.submittedAt || '';
-      return dateRef.startsWith(yearPrefix);
+      if (p.submittedAt && p.submittedAt < OFFICIAL_LAUNCH_CUTOFF_ISO) return false;
+      const dateRef = p.submittedAt ? p.submittedAt.slice(0, 10) : p.arrivalDate || '';
+      return dateRef.startsWith(yearPrefix) && dateRef >= OFFICIAL_LAUNCH_DATE;
     });
     const pdeAddedCount = yearPdes.length;
     const pdeAddedPoints = roundIpa(pdeAddedCount * 0.3);

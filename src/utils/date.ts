@@ -46,3 +46,32 @@ export function isDateInPast(dateStr: string | undefined): boolean {
   const today = getTodayDateString();
   return dateStr < today;
 }
+
+/**
+ * Colaboradores só podem alterar o estado das tarefas de um dia até às 02:00 (hora de Lisboa) do dia seguinte.
+ */
+export function isTaskStatusLockedForCollaborator(taskDate: string | undefined, now: Date = new Date()): boolean {
+  if (!taskDate || !/^\d{4}-\d{2}-\d{2}$/.test(taskDate)) return false;
+  const [y, m, d] = taskDate.split('-').map(Number);
+  const nextDayStr = new Date(Date.UTC(y, m - 1, d) + 86400000).toISOString().split('T')[0];
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Lisbon',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  });
+  const parts = formatter.formatToParts(now);
+  const map: Record<string, string> = {};
+  for (const p of parts) {
+    if (p.type !== 'literal') map[p.type] = p.value;
+  }
+  const todayStr = `${map.year}-${map.month}-${map.day}`;
+  const hour = parseInt(map.hour || '0', 10) % 24;
+
+  if (todayStr > nextDayStr) return true;
+  if (todayStr === nextDayStr && hour >= 2) return true;
+  return false;
+}

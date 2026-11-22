@@ -69,12 +69,12 @@ function parsePtDecimal(raw: string): number | null {
   return Number.isFinite(parsed) ? roundIpa(parsed) : null;
 }
 
-// Tabela oficial de fallback sincronizada com Tabela_IPA_c01828b6.csv
+// Tabela oficial de fallback sincronizada com Tabela_IPA_8ba24c0c.csv
 const DEFAULT_IPA_TABLE: Record<string, TaskIpaPoints> = {
-  "VERIFICAR R'S E VALIDADES": { pending: -0.7, done: 0.7, notDone: -0.5 },
-  'VERIFICAR RASTREABILIDADES FRUTA': { pending: -0.5, done: 0.5, notDone: -0.3 },
-  'VERIFICAR RASTREABILIDADES LEGUMES': { pending: -0.5, done: 0.5, notDone: -0.3 },
-  'VERIFICAR RASTREABILIDADES TAKEOUT': { pending: -0.5, done: 0.5, notDone: -0.3 },
+  "VERIFICAR R'S E VALIDADES": { pending: -0.6, done: 0.7, notDone: -0.5 },
+  'VERIFICAR RASTREABILIDADES FRUTA': { pending: -0.4, done: 0.5, notDone: -0.3 },
+  'VERIFICAR RASTREABILIDADES LEGUMES': { pending: -0.4, done: 0.5, notDone: -0.3 },
+  'VERIFICAR RASTREABILIDADES TAKEOUT': { pending: -0.4, done: 0.5, notDone: -0.3 },
   'AUDITORIA FOLHETO (PML)': { pending: -0.3, done: 0.3, notDone: -0.2 },
   'AUDITAR PRECOS | PRECARIOS': { pending: -0.4, done: 0.4, notDone: -0.2 },
   'LIMPAR MONTRAS DO TAKEOUT': { pending: -0.4, done: 0.4, notDone: -0.2 },
@@ -85,6 +85,9 @@ const DEFAULT_IPA_TABLE: Record<string, TaskIpaPoints> = {
   'DEPRECIADOS (PML)': { pending: -0.7, done: 0.7, notDone: -0.6 },
   "DEPRECIADOS (APP R'S)": { pending: -0.6, done: 0.6, notDone: -0.5 },
   'ARRUMAR CAIXAS CHEP': { pending: -0.4, done: 0.4, notDone: -0.2 },
+  'LIMPAR CAMARA DE FRUTAS': { pending: -0.4, done: 0.4, notDone: -0.2 },
+  'LIMPAR CAMARA DE LEGUMES': { pending: -0.4, done: 0.4, notDone: -0.2 },
+  'LAVAR RALOS DAS CAMARAS': { pending: -0.4, done: 0.4, notDone: -0.2 },
   'FOTOS REGISTOS SA': { pending: -0.2, done: 0.2, notDone: -0.1 },
   'FOTOS (16H)': { pending: -0.2, done: 0.2, notDone: -0.1 },
   'FOTOS (19H)': { pending: -0.2, done: 0.2, notDone: -0.1 },
@@ -92,14 +95,14 @@ const DEFAULT_IPA_TABLE: Record<string, TaskIpaPoints> = {
   'FOTOS ZONA QUEBRAS': { pending: -0.2, done: 0.2, notDone: -0.1 },
   'FOTOS TAKEOUT | ZONA LIXO': { pending: -0.2, done: 0.2, notDone: -0.1 },
   'FOTOS FECHO': { pending: -0.2, done: 0.2, notDone: -0.1 },
-  'L': { pending: -1.0, done: 1.0, notDone: -0.8 },
-  'SL': { pending: -1.0, done: 1.0, notDone: -0.8 },
-  'S': { pending: -1.0, done: 1.0, notDone: -0.8 },
-  'A': { pending: -1.0, done: 1.0, notDone: -0.8 },
-  'B': { pending: -1.0, done: 1.0, notDone: -0.8 },
-  'C': { pending: -1.0, done: 1.0, notDone: -0.8 },
-  'TAKEOUT': { pending: -1.0, done: 1.0, notDone: -0.8 },
-  'SALADAS': { pending: -1.0, done: 1.0, notDone: -0.8 },
+  'L': { pending: -0.9, done: 1.0, notDone: -0.8 },
+  'SL': { pending: -0.9, done: 1.0, notDone: -0.8 },
+  'S': { pending: -0.9, done: 1.0, notDone: -0.8 },
+  'A': { pending: -0.9, done: 1.0, notDone: -0.8 },
+  'B': { pending: -0.9, done: 1.0, notDone: -0.8 },
+  'C': { pending: -0.9, done: 1.0, notDone: -0.8 },
+  'TAKEOUT': { pending: -0.9, done: 1.0, notDone: -0.8 },
+  'SALADAS': { pending: -0.9, done: 1.0, notDone: -0.8 },
 };
 
 let cachedIpaTable: Record<string, TaskIpaPoints> | null = null;
@@ -108,7 +111,7 @@ function loadIpaTable(): Record<string, TaskIpaPoints> {
   if (cachedIpaTable) return cachedIpaTable;
 
   const table: Record<string, TaskIpaPoints> = { ...DEFAULT_IPA_TABLE };
-  const csvPath = path.resolve(process.cwd(), 'public/assets/aistudio/Tabela_IPA_c01828b6.csv');
+  const csvPath = path.resolve(process.cwd(), 'public/assets/aistudio/Tabela_IPA_8ba24c0c.csv');
 
   try {
     if (fs.existsSync(csvPath)) {
@@ -214,6 +217,15 @@ export function resolveTaskIpaPoints(task: DailyTask): TaskIpaPoints {
   }
   if (normDesc.includes('CHEP')) {
     return table['ARRUMAR CAIXAS CHEP'];
+  }
+  if (normDesc.includes('RALO')) {
+    return table['LAVAR RALOS DAS CAMARAS'];
+  }
+  if (normDesc.includes('CAMARA') && normDesc.includes('FRUTA')) {
+    return table['LIMPAR CAMARA DE FRUTAS'];
+  }
+  if (normDesc.includes('CAMARA') && normDesc.includes('LEGUME')) {
+    return table['LIMPAR CAMARA DE LEGUMES'];
   }
   if (withoutShift === 'QUEBRA' || normDesc.startsWith('QUEBRA')) {
     return table['QUEBRA'];

@@ -915,7 +915,10 @@ function parsePtsSheet(
       }
 
       let taskDescription = rawTask;
-      if ((normTask === 'QUEBRA' || normTask === 'ARRUMAR CAIXAS CHEP') && currentShiftSuffix) {
+      if (
+        (normTask === 'QUEBRA' || normTask === 'ARRUMAR CAIXAS CHEP' || normTask === 'LAVAR RALOS DAS CAMARAS') &&
+        currentShiftSuffix
+      ) {
         taskDescription = `${rawTask} (${currentShiftSuffix})`;
       }
 

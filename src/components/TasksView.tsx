@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Collaborator, DailyTask, MealSchedule, TaskStatus, ShiftStatusInfo, TaskPerformanceResponse } from '../types/index.ts';
 import { api } from '../services/api.ts';
-import { formatDatePt } from '../utils/date.ts';
+import { formatDatePt, isTaskStatusLockedForCollaborator } from '../utils/date.ts';
 import {
   Utensils,
   Clock,
@@ -20,6 +20,7 @@ import {
   CalendarOff,
   Pencil,
   Trash2,
+  Lock,
 } from 'lucide-react';
 
 interface TasksViewProps {
@@ -65,6 +66,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<{ id: string; success: boolean; msg: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clockNow, setClockNow] = useState<Date>(() => new Date());
 
   // Modal de Tarefa Adicional
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -180,7 +182,26 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
     return () => controller.abort();
   }, [selectedDate, selectedCollaboratorNumber]);
 
+  useEffect(() => {
+    if (isAdmin) return;
+    setClockNow(new Date());
+    const timer = window.setInterval(() => {
+      setClockNow(new Date());
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [isAdmin, selectedDate]);
+
   const handleStatusClick = async (task: DailyTask, newStatus: TaskStatus) => {
+    if (!isAdmin && isTaskStatusLockedForCollaborator(task.date, new Date())) {
+      setClockNow(new Date());
+      setSaveFeedback({
+        id: task.id,
+        success: false,
+        msg: 'O prazo para alterar o estado das tarefas deste dia terminou às 02:00 do dia seguinte. Apenas o Administrador pode efetuar correções.',
+      });
+      return;
+    }
+
     if (newStatus === 'NAO_FEITA') {
       setObservingTask(task);
       setPendingStatus('NAO_FEITA');
@@ -311,6 +332,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   };
 
   const isAllView = canViewAll && selectedCollaboratorNumber === 'TODOS';
+  const isDayLocked = !isAdmin && isTaskStatusLockedForCollaborator(selectedDate, clockNow);
 
   const principalTasks = tasks.filter(t => t.type === 'PRINCIPAL');
   const secundaryTasks = tasks.filter(t => t.type === 'SECUNDARIA');
@@ -323,8 +345,10 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
   const renderTaskCard = (task: DailyTask) => {
     const isSaving = savingTaskId === task.id;
     const feedback = saveFeedback?.id === task.id ? saveFeedback : null;
-    const canAnswer = canViewAll || task.mecanographicNumber === currentUser.mecanographicNumber;
-    const canEdit = canEditTasks; // Administrador e Administrador 2 podem editar ou apagar tarefas
+    const isTaskLocked = !isAdmin && isTaskStatusLockedForCollaborator(task.date, clockNow);
+    const canAnswer =
+      (canViewAll || task.mecanographicNumber === currentUser.mecanographicNumber) && !isTaskLocked;
+    const canEdit = canEditTasks && !isTaskLocked; // Apenas Administrador pode corrigir/editar tarefas após o bloqueio das 02:00
 
     return (
       <div
@@ -436,7 +460,12 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
               </div>
             ) : (
               <span
-                className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                title={
+                  isTaskLocked
+                    ? 'Estado bloqueado: o prazo terminou às 02:00 do dia seguinte.'
+                    : undefined
+                }
+                className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${
                   task.status === 'FEITA'
                     ? 'bg-success-tint text-success-ink border-success-border'
                     : task.status === 'NAO_FEITA'
@@ -444,6 +473,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
                     : 'bg-amber-tint text-amber-ink border-amber-border'
                 }`}
               >
+                {isTaskLocked && <Lock className="w-3 h-3 shrink-0 opacity-80" />}
                 {task.status === 'FEITA'
                   ? 'Feita'
                   : task.status === 'NAO_FEITA'
@@ -998,6 +1028,17 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
         )
       ) : (
         <div className="space-y-6">
+          {isDayLocked && (
+            <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-amber-tint/70 border border-amber-border text-xs text-amber-ink">
+              <Lock className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                <strong>Alteração bloqueada:</strong> o estado das tarefas de{' '}
+                <strong>{formatDatePt(selectedDate)}</strong> só podia ser alterado até às{' '}
+                <strong>02:00 do dia seguinte</strong>. Apenas o perfil de <strong>Administrador</strong> pode efetuar correções.
+              </span>
+            </div>
+          )}
+
           {/* 1. TAREFAS PRINCIPAIS */}
           <section className="space-y-3">
             <div className="flex items-center justify-between pb-1 border-b border-line">
