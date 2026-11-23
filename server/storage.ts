@@ -3229,6 +3229,35 @@ class StorageManager {
         ? this.getCollaboratorAnnualScore(mecanographicNumber, scoreYear)
         : null;
 
+    const workingCollaboratorsDaily = !mecanographicNumber
+      ? this.getAllShiftsForDate(validSelectedDate)
+          .filter(s => s.shiftStatus === 'TRABALHO')
+          .map(shift => {
+            const dayTasks = this.getTasks({
+              date: validSelectedDate,
+              mecanographicNumber: shift.collaboratorNumber,
+            });
+            const totalTasks = dayTasks.length;
+            const completedTasks = dayTasks.filter(t => t.status === 'FEITA').length;
+            const notDoneTasks = dayTasks.filter(t => t.status === 'NAO_FEITA').length;
+            const pendingTasks = dayTasks.filter(t => t.status === 'POR_ASSINALAR').length;
+            const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+            return {
+              mecanographicNumber: shift.collaboratorNumber,
+              name: shift.collaboratorName,
+              mealTime: shift.mealTime,
+              totalTasks,
+              completedTasks,
+              notDoneTasks,
+              pendingTasks,
+              completionRate,
+              annualScore: this.getCollaboratorAnnualScore(shift.collaboratorNumber, scoreYear),
+            };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name, 'pt'))
+      : undefined;
+
     return {
       collaboratorNumber: targetColab?.mecanographicNumber,
       collaboratorName: targetColab?.name,
@@ -3236,6 +3265,7 @@ class StorageManager {
       currentWeek,
       selectedWeek,
       annualScore,
+      workingCollaboratorsDaily,
     };
   }
 }

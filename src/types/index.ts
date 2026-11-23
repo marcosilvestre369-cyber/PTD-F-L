@@ -217,6 +217,18 @@ export interface CollaboratorAnnualScore {
   totalPoints: number;
 }
 
+export interface WorkingCollaboratorDailyProgress {
+  mecanographicNumber: string;
+  name: string;
+  mealTime?: string;
+  totalTasks: number;
+  completedTasks: number;
+  notDoneTasks: number;
+  pendingTasks: number;
+  completionRate: number;
+  annualScore: CollaboratorAnnualScore;
+}
+
 export interface TaskPerformanceResponse {
   collaboratorNumber?: string;
   collaboratorName?: string;
@@ -224,6 +236,7 @@ export interface TaskPerformanceResponse {
   currentWeek: WeeklyTaskCompletion;
   selectedWeek: WeeklyTaskCompletion;
   annualScore: CollaboratorAnnualScore | null;
+  workingCollaboratorsDaily?: WorkingCollaboratorDailyProgress[];
 }
 
 export interface CollaboratorTaskSummary {

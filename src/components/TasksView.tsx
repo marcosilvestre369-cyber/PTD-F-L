@@ -21,6 +21,7 @@ import {
   Pencil,
   Trash2,
   Lock,
+  ChevronRight,
 } from 'lucide-react';
 
 interface TasksViewProps {
@@ -951,6 +952,147 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
         <div className="py-12 text-center text-on-surface-muted text-sm font-medium">
           A carregar tarefas da secção...
         </div>
+      ) : isAllView ? (
+        (() => {
+          const workingDaily = performance?.workingCollaboratorsDaily ?? [];
+          return (
+            <section className="bg-surface-card rounded-2xl border border-line shadow-xs overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-4 sm:px-5 py-3.5 border-b border-line-subtle">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-bold text-on-surface tracking-tight">
+                    Cumprimento Diário e IPA — Colaboradores em Trabalho
+                  </span>
+                  <span className="text-xs text-on-surface-subtle font-mono tabular-nums shrink-0">
+                    · {workingDaily.length}
+                  </span>
+                </div>
+                <span className="text-xs text-on-surface-subtle">
+                  {formatDatePt(selectedDate)} · Clique num colaborador para abrir as tarefas
+                </span>
+              </div>
+
+              {workingDaily.length === 0 ? (
+                <div className="p-10 text-center space-y-2">
+                  <Calendar className="w-9 h-9 text-amber-brand mx-auto" />
+                  <h3 className="text-sm font-bold text-on-surface">
+                    Sem colaboradores em trabalho nesta data
+                  </h3>
+                  <p className="text-xs text-on-surface-muted max-w-md mx-auto">
+                    Não existem turnos ou tarefas escaladas para colaboradores em {formatDatePt(selectedDate)}.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-line-subtle">
+                  {workingDaily.map(item => {
+                    const barColor =
+                      item.completionRate >= 80
+                        ? 'bg-success'
+                        : item.completionRate >= 50
+                        ? 'bg-amber-brand'
+                        : 'bg-danger';
+                    const ipaVal = item.annualScore.totalPoints;
+                    const ipaColor =
+                      ipaVal > 0
+                        ? 'text-success-ink'
+                        : ipaVal < 0
+                        ? 'text-danger-ink'
+                        : 'text-on-surface';
+
+                    return (
+                      <button
+                        key={item.mecanographicNumber}
+                        type="button"
+                        onClick={() => setSelectedCollaboratorNumber(item.mecanographicNumber)}
+                        className="w-full text-left px-4 sm:px-5 py-3.5 hover:bg-surface-container/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-brand group"
+                      >
+                        <div className="grid grid-cols-12 items-center gap-3 sm:gap-4">
+                          {/* Identificação e resumo diário */}
+                          <div className="col-span-12 md:col-span-4 min-w-0">
+                            <div className="text-sm font-semibold text-on-surface truncate group-hover:text-amber-ink transition-colors">
+                              {item.name}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-on-surface-subtle mt-0.5 font-mono tabular-nums">
+                              <span>Nº {item.mecanographicNumber}</span>
+                              <span aria-hidden="true">·</span>
+                              <span className="font-sans">
+                                {item.completedTasks}/{item.totalTasks} feitas
+                              </span>
+                              {item.notDoneTasks > 0 && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="font-sans text-danger-ink">
+                                    {item.notDoneTasks} não feitas
+                                  </span>
+                                </>
+                              )}
+                              {item.pendingTasks > 0 && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="font-sans text-amber-ink">
+                                    {item.pendingTasks} por assinalar
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Barra de cumprimento do dia */}
+                          <div className="col-span-8 md:col-span-5 flex items-center gap-3 min-w-0">
+                            <div
+                              role="progressbar"
+                              aria-valuenow={item.completionRate}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-label={`Cumprimento diário de ${item.name}`}
+                              className="relative flex-1 h-2.5 sm:h-3 bg-surface-container rounded-full overflow-hidden ring-1 ring-inset ring-line"
+                            >
+                              <div
+                                className={`h-full rounded-full transition-[width] duration-500 ease-out ${barColor}`}
+                                style={{
+                                  width: `${Math.max(0, Math.min(100, item.completionRate))}%`,
+                                }}
+                              />
+                              <div
+                                aria-hidden="true"
+                                className="pointer-events-none absolute inset-0 grid grid-cols-4 divide-x divide-surface-card/35"
+                              >
+                                <span />
+                                <span />
+                                <span />
+                                <span />
+                              </div>
+                            </div>
+                            <span className="w-11 text-right text-sm font-bold font-mono tabular-nums text-on-surface shrink-0">
+                              {item.completionRate}%
+                            </span>
+                          </div>
+
+                          {/* Pontuação IPA à frente da barra */}
+                          <div
+                            className="col-span-4 md:col-span-3 flex items-center justify-end gap-3 pl-2 border-l border-line-subtle"
+                            title={`IPA ${item.annualScore.year}: Tarefas (${formatIpaNumber(item.annualScore.tasksNetPoints)}) · Stocks (${formatIpaNumber(item.annualScore.stockNetPoints)}) · PDE (${formatIpaNumber(item.annualScore.pdeNetPoints)})`}
+                          >
+                            <div className="text-right min-w-0">
+                              <div className="text-[11px] font-medium text-on-surface-subtle leading-tight">
+                                IPA {item.annualScore.year}
+                              </div>
+                              <div
+                                className={`text-base sm:text-lg font-bold font-mono tabular-nums leading-tight ${ipaColor}`}
+                              >
+                                {formatIpaOption(ipaVal)}
+                              </div>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-on-surface-subtle group-hover:text-on-surface group-hover:translate-x-0.5 transition-all shrink-0" />
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          );
+        })()
       ) : tasks.length === 0 ? (
         shiftStatus?.shiftStatus === 'FÉRIAS' ? (
           <div className="bg-danger-tint/60 rounded-2xl border border-danger-border p-8 sm:p-12 text-center space-y-4 shadow-xs">
