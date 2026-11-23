@@ -3041,6 +3041,8 @@ class StorageManager {
         stockAddedPoints: 0,
         stockTreatedCount: 0,
         stockTreatedPoints: 0,
+        stockNotConsideredCount: 0,
+        stockNotConsideredPoints: 0,
         stockNetPoints: 0,
         pdeAddedCount: 0,
         pdeAddedPoints: 0,
@@ -3142,7 +3144,7 @@ class StorageManager {
         weeklyOver95Points
     );
 
-    // 4.5: Excesso de stock ou rotura/revisão (+0,1 ponto registo, +0,4 pontos se tratado) — a partir de 23/11/2026
+    // 4.5: Excesso de stock ou rotura/revisão (+0,1 registo, +0,2 tratado, -0,1 não considerado) — a partir de 23/11/2026
     const yearStocks = (this.store.stocks || []).filter(s => {
       if (s.type !== 'EXCESSO' && s.type !== 'ROTURA') return false;
       if (s.authorNumber !== mecanographicNumber) return false;
@@ -3155,10 +3157,16 @@ class StorageManager {
     const stockTreatedCount = yearStocks.filter(
       s => s.status === 'TRATADO' || (s.status as string) === 'RESOLVIDO'
     ).length;
-    const stockTreatedPoints = roundIpa(stockTreatedCount * 0.4);
-    const stockNetPoints = roundIpa(stockAddedPoints + stockTreatedPoints);
+    const stockTreatedPoints = roundIpa(stockTreatedCount * 0.2);
+    const stockNotConsideredCount = yearStocks.filter(
+      s => s.status === 'NAO_CONSIDERADO'
+    ).length;
+    const stockNotConsideredPoints = roundIpa(stockNotConsideredCount * -0.1);
+    const stockNetPoints = roundIpa(
+      stockAddedPoints + stockTreatedPoints + stockNotConsideredPoints
+    );
 
-    // 4.6: Pedido de PDE (+0,3 pontos registo, +0,7 pontos se resolvido) — a partir de 23/11/2026
+    // 4.6: Pedido de PDE (+0,3 pontos registo, +0,6 pontos se resolvido) — a partir de 23/11/2026
     const yearPdes = (this.store.pdes || []).filter(p => {
       if (p.submittedByNumber !== mecanographicNumber) return false;
       if (p.submittedAt && p.submittedAt < OFFICIAL_LAUNCH_CUTOFF_ISO) return false;
@@ -3168,7 +3176,7 @@ class StorageManager {
     const pdeAddedCount = yearPdes.length;
     const pdeAddedPoints = roundIpa(pdeAddedCount * 0.3);
     const pdeResolvedCount = yearPdes.filter(p => p.status === 'RESOLVIDO').length;
-    const pdeResolvedPoints = roundIpa(pdeResolvedCount * 0.7);
+    const pdeResolvedPoints = roundIpa(pdeResolvedCount * 0.6);
     const pdeNetPoints = roundIpa(pdeAddedPoints + pdeResolvedPoints);
 
     const totalPoints = roundIpa(tasksNetPoints + stockNetPoints + pdeNetPoints);
@@ -3193,6 +3201,8 @@ class StorageManager {
       stockAddedPoints,
       stockTreatedCount,
       stockTreatedPoints,
+      stockNotConsideredCount,
+      stockNotConsideredPoints,
       stockNetPoints,
       pdeAddedCount,
       pdeAddedPoints,

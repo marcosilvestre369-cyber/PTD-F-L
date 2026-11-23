@@ -208,6 +208,8 @@ export interface CollaboratorAnnualScore {
   stockAddedPoints: number;
   stockTreatedCount: number;
   stockTreatedPoints: number;
+  stockNotConsideredCount?: number;
+  stockNotConsideredPoints?: number;
   stockNetPoints: number;
   pdeAddedCount: number;
   pdeAddedPoints: number;

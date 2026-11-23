@@ -799,7 +799,7 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
 
               <div className="bg-surface-container border border-line rounded-xl px-3 py-2 text-[11px] text-on-surface-muted flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  <strong className="text-on-surface">IPA ({effectiveDate.slice(0, 4)}):</strong> Tabela IPA por tarefa (CSV) · Tarefas atribuídas (-1,0 a +1,0) · Dia 100% (+0,1) · Semana &gt;95% (+0,3 após domingo) · Stocks Excesso/Rotura (+0,1 registo, +0,4 tratado) · PDE (+0,3 registo, +0,7 resolvido)
+                  <strong className="text-on-surface">IPA ({effectiveDate.slice(0, 4)}):</strong> Tabela IPA por tarefa (CSV) · Tarefas atribuídas (-1,0 a +1,0) · Dia 100% (+0,1) · Semana &gt;95% (+0,3 após domingo) · Stocks Excesso/Rotura (+0,1 registo, +0,2 tratado, -0,1 não considerado) · PDE (+0,3 registo, +0,6 resolvido)
                 </span>
                 <span className="text-on-surface-subtle font-medium">
                   Administradores, Administrador 2 e Gestores de Stocks &amp; PDE não estão sujeitos a IPA · Reinicia anualmente

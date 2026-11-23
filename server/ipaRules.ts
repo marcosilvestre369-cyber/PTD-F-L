@@ -69,32 +69,32 @@ function parsePtDecimal(raw: string): number | null {
   return Number.isFinite(parsed) ? roundIpa(parsed) : null;
 }
 
-// Tabela oficial de fallback sincronizada com Tabela_IPA_8ba24c0c.csv
+// Tabela oficial de fallback sincronizada com Tabela_IPA_00b0ae15.csv
 const DEFAULT_IPA_TABLE: Record<string, TaskIpaPoints> = {
-  "VERIFICAR R'S E VALIDADES": { pending: -0.6, done: 0.7, notDone: -0.5 },
+  "VERIFICAR R'S E VALIDADES": { pending: -0.5, done: 0.6, notDone: -0.4 },
   'VERIFICAR RASTREABILIDADES FRUTA': { pending: -0.4, done: 0.5, notDone: -0.3 },
   'VERIFICAR RASTREABILIDADES LEGUMES': { pending: -0.4, done: 0.5, notDone: -0.3 },
-  'VERIFICAR RASTREABILIDADES TAKEOUT': { pending: -0.4, done: 0.5, notDone: -0.3 },
-  'AUDITORIA FOLHETO (PML)': { pending: -0.3, done: 0.3, notDone: -0.2 },
-  'AUDITAR PRECOS | PRECARIOS': { pending: -0.4, done: 0.4, notDone: -0.2 },
-  'LIMPAR MONTRAS DO TAKEOUT': { pending: -0.4, done: 0.4, notDone: -0.2 },
-  'FOTOS (8H)': { pending: -0.2, done: 0.2, notDone: -0.1 },
-  'FOTOS (11H)': { pending: -0.2, done: 0.2, notDone: -0.1 },
-  'ANALISE EXCESSO STOCK': { pending: -0.6, done: 0.6, notDone: -0.3 },
-  'QUEBRA': { pending: -0.8, done: 0.8, notDone: -0.7 },
-  'DEPRECIADOS (PML)': { pending: -0.7, done: 0.7, notDone: -0.6 },
-  "DEPRECIADOS (APP R'S)": { pending: -0.6, done: 0.6, notDone: -0.5 },
-  'ARRUMAR CAIXAS CHEP': { pending: -0.4, done: 0.4, notDone: -0.2 },
-  'LIMPAR CAMARA DE FRUTAS': { pending: -0.4, done: 0.4, notDone: -0.2 },
-  'LIMPAR CAMARA DE LEGUMES': { pending: -0.4, done: 0.4, notDone: -0.2 },
-  'LAVAR RALOS DAS CAMARAS': { pending: -0.4, done: 0.4, notDone: -0.2 },
-  'FOTOS REGISTOS SA': { pending: -0.2, done: 0.2, notDone: -0.1 },
-  'FOTOS (16H)': { pending: -0.2, done: 0.2, notDone: -0.1 },
-  'FOTOS (19H)': { pending: -0.2, done: 0.2, notDone: -0.1 },
-  'LIMPAR BALANCAS': { pending: -0.4, done: 0.4, notDone: -0.3 },
-  'FOTOS ZONA QUEBRAS': { pending: -0.2, done: 0.2, notDone: -0.1 },
-  'FOTOS TAKEOUT | ZONA LIXO': { pending: -0.2, done: 0.2, notDone: -0.1 },
-  'FOTOS FECHO': { pending: -0.2, done: 0.2, notDone: -0.1 },
+  'VERIFICAR RASTREABILIDADES TAKEOUT': { pending: -0.3, done: 0.4, notDone: -0.2 },
+  'AUDITORIA FOLHETO (PML)': { pending: -0.1, done: 0.2, notDone: -0.1 },
+  'AUDITAR PRECOS | PRECARIOS': { pending: -0.2, done: 0.3, notDone: -0.1 },
+  'LIMPAR MONTRAS DO TAKEOUT': { pending: -0.1, done: 0.2, notDone: -0.1 },
+  'FOTOS (8H)': { pending: -0.1, done: 0.1, notDone: -0.1 },
+  'FOTOS (11H)': { pending: -0.1, done: 0.1, notDone: -0.1 },
+  'ANALISE EXCESSO STOCK': { pending: -0.3, done: 0.4, notDone: -0.2 },
+  'QUEBRA': { pending: -0.5, done: 0.6, notDone: -0.4 },
+  'DEPRECIADOS (PML)': { pending: -0.4, done: 0.5, notDone: -0.3 },
+  "DEPRECIADOS (APP R'S)": { pending: -0.3, done: 0.4, notDone: -0.2 },
+  'ARRUMAR CAIXAS CHEP': { pending: -0.1, done: 0.2, notDone: -0.1 },
+  'LIMPAR CAMARA DE FRUTAS': { pending: -0.2, done: 0.3, notDone: -0.1 },
+  'LIMPAR CAMARA DE LEGUMES': { pending: -0.2, done: 0.3, notDone: -0.1 },
+  'LAVAR RALOS DAS CAMARAS': { pending: -0.1, done: 0.2, notDone: -0.1 },
+  'FOTOS REGISTOS SA': { pending: -0.1, done: 0.2, notDone: -0.1 },
+  'FOTOS (16H)': { pending: -0.1, done: 0.1, notDone: -0.1 },
+  'FOTOS (19H)': { pending: -0.1, done: 0.1, notDone: -0.1 },
+  'LIMPAR BALANCAS': { pending: -0.1, done: 0.2, notDone: -0.1 },
+  'FOTOS ZONA QUEBRAS': { pending: -0.1, done: 0.2, notDone: -0.1 },
+  'FOTOS TAKEOUT | ZONA LIXO': { pending: -0.1, done: 0.2, notDone: -0.1 },
+  'FOTOS FECHO': { pending: -0.1, done: 0.1, notDone: -0.1 },
   'L': { pending: -0.9, done: 1.0, notDone: -0.8 },
   'SL': { pending: -0.9, done: 1.0, notDone: -0.8 },
   'S': { pending: -0.9, done: 1.0, notDone: -0.8 },
@@ -111,7 +111,7 @@ function loadIpaTable(): Record<string, TaskIpaPoints> {
   if (cachedIpaTable) return cachedIpaTable;
 
   const table: Record<string, TaskIpaPoints> = { ...DEFAULT_IPA_TABLE };
-  const csvPath = path.resolve(process.cwd(), 'public/assets/aistudio/Tabela_IPA_8ba24c0c.csv');
+  const csvPath = path.resolve(process.cwd(), 'public/assets/aistudio/Tabela_IPA_00b0ae15.csv');
 
   try {
     if (fs.existsSync(csvPath)) {
@@ -184,7 +184,19 @@ export function resolveTaskIpaPoints(task: DailyTask): TaskIpaPoints {
 
   // 5. Regras tolerantes para variações de descrições PTS
   if (normDesc.startsWith('FOTOS')) {
-    return table['FOTOS (8H)'] || { pending: -0.2, done: 0.2, notDone: -0.1 };
+    if (normDesc.includes('REGISTO') && normDesc.includes('SA')) {
+      return table['FOTOS REGISTOS SA'];
+    }
+    if (normDesc.includes('QUEBRA')) {
+      return table['FOTOS ZONA QUEBRAS'];
+    }
+    if (normDesc.includes('TAKEOUT') || normDesc.includes('LIXO')) {
+      return table['FOTOS TAKEOUT | ZONA LIXO'];
+    }
+    if (normDesc.includes('FECHO')) {
+      return table['FOTOS FECHO'];
+    }
+    return table['FOTOS (8H)'] || { pending: -0.1, done: 0.1, notDone: -0.1 };
   }
   if (normDesc.includes("VERIFICAR R'S") || normDesc.includes('VERIFICAR RS') || (normDesc.includes('VALIDADES') && normDesc.includes('VERIFICAR'))) {
     return table["VERIFICAR R'S E VALIDADES"];
