@@ -3016,7 +3016,11 @@ class StorageManager {
     };
   }
 
-  public getCollaboratorAnnualScore(mecanographicNumber: string, year: string): CollaboratorAnnualScore {
+  public getCollaboratorAnnualScore(
+    mecanographicNumber: string,
+    year: string,
+    now: Date = new Date()
+  ): CollaboratorAnnualScore {
     const colab = this.getCollaboratorByNumber(mecanographicNumber);
     const eligible = Boolean(colab && colab.role === 'COLABORADOR');
 
@@ -3055,7 +3059,6 @@ class StorageManager {
 
     const yearPrefix = `${year}-`;
     const numericYear = parseInt(year, 10) || undefined;
-    const todayLisbonStr = getLisbonDateTimeParts().dateStr;
 
     // 4.1: Tarefas do ano a partir do início oficial (23/11/2026) — reset anual automático por prefixo YYYY-
     const yearTasks = (this.store.tasks || []).filter(
@@ -3067,24 +3070,34 @@ class StorageManager {
     const taskTotalCount = yearTasks.length;
     let taskCompletedCount = 0;
     let taskNotDoneCount = 0;
+    let taskPendingCount = 0;
     let taskCompletedPointsRaw = 0;
     let taskNotDonePointsRaw = 0;
+    let taskPendingPointsRaw = 0;
 
     // 4.2: Pontos por tarefa e estado conforme Tabela IPA CSV (ou pontos personalizados definidos pelo admin)
+    // Os pontos negativos de tarefas "Não Feitas" ou "Por Assinalar" são atribuídos às 02:00 do dia seguinte,
+    // no momento em que os colaboradores deixam de poder alterar o estado das tarefas desse dia.
     for (const t of yearTasks) {
       const pts = resolveTaskIpaPoints(t);
       if (t.status === 'FEITA') {
         taskCompletedCount += 1;
         taskCompletedPointsRaw += pts.done;
-      } else if (t.status === 'NAO_FEITA') {
-        taskNotDoneCount += 1;
-        taskNotDonePointsRaw += pts.notDone;
+      } else if (isTaskStatusLockedForCollaborator(t.date, now)) {
+        if (t.status === 'NAO_FEITA') {
+          taskNotDoneCount += 1;
+          taskNotDonePointsRaw += pts.notDone;
+        } else if (t.status === 'POR_ASSINALAR') {
+          taskPendingCount += 1;
+          taskPendingPointsRaw += pts.pending;
+        }
       }
     }
 
     const taskCompletionRate = taskTotalCount > 0 ? Math.round((taskCompletedCount / taskTotalCount) * 100) : 0;
     const taskCompletedPoints = roundIpa(taskCompletedPointsRaw);
     const taskNotDonePoints = roundIpa(taskNotDonePointsRaw);
+    const taskPendingPoints = roundIpa(taskPendingPointsRaw);
 
     // 4.3: Se a taxa de cumprimento (dia) for de 100%, ganha +0,1 pontos por dia
     const tasksByDay = new Map<string, DailyTask[]>();
@@ -3101,9 +3114,7 @@ class StorageManager {
     }
     const daily100Points = roundIpa(daily100Count * 0.1);
 
-    // Avaliações após o último dia da semana (Domingo terminado):
-    // - Tarefas por assinalar (pontos da Tabela IPA / personalizados)
-    // - 4.4: Taxa de cumprimento semanal superior a 95% -> +0,3 pontos
+    // 4.4: Taxa de cumprimento semanal superior a 95% -> +0,3 pontos (após fecho do domingo às 02:00 de segunda)
     const tasksByWeek = new Map<string, { weekEnd: string; tasks: DailyTask[] }>();
     for (const t of yearTasks) {
       const wb = getWeekBoundsFromDate(t.date, numericYear);
@@ -3114,26 +3125,16 @@ class StorageManager {
         tasksByWeek.set(wb.weekStart, { weekEnd: wb.weekEnd, tasks: [t] });
       }
     }
-    let taskPendingCount = 0;
-    let taskPendingPointsRaw = 0;
     let weeklyOver95Count = 0;
     for (const { weekEnd, tasks: weekTasks } of tasksByWeek.values()) {
-      // Só atribuído após o último dia da semana (Domingo) ter terminado
-      if (todayLisbonStr <= weekEnd) continue;
+      if (!isTaskStatusLockedForCollaborator(weekEnd, now)) continue;
       const total = weekTasks.length;
       if (total === 0) continue;
-      for (const wt of weekTasks) {
-        if (wt.status === 'POR_ASSINALAR') {
-          taskPendingCount += 1;
-          taskPendingPointsRaw += resolveTaskIpaPoints(wt).pending;
-        }
-      }
       const completed = weekTasks.filter(t => t.status === 'FEITA').length;
       if (completed / total > 0.95) {
         weeklyOver95Count += 1;
       }
     }
-    const taskPendingPoints = roundIpa(taskPendingPointsRaw);
     const weeklyOver95Points = roundIpa(weeklyOver95Count * 0.3);
 
     const tasksNetPoints = roundIpa(
