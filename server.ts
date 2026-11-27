@@ -340,7 +340,12 @@ app.get('/api/tasks', authenticateToken, limited((req, res) => {
     mecanographicNumber: canViewAll && !collaboratorNumber ? undefined : targetNumber,
   });
 
-  return res.json(tasks);
+  // Colaboradores não podem ver a informação de pontos IPA nas tarefas adicionais
+  const visibleTasks = canViewAll
+    ? tasks
+    : tasks.map(({ ipaPoints: _hiddenIpa, ...rest }) => rest);
+
+  return res.json(visibleTasks);
 }, { label: 'tasks:list' }));
 
 app.get('/api/tasks/performance', authenticateToken, limited((req, res) => {
@@ -511,6 +516,11 @@ app.get('/api/stocks', authenticateToken, limited((req, res) => {
 }, { label: 'stocks:list' }));
 
 app.post('/api/stocks', authenticateToken, limited((req, res) => {
+  if (req.user!.role === 'GESTOR_STOCKS_PDE') {
+    return res.status(403).json({
+      error: 'O perfil de Gestor de Stocks & PDE não tem permissão para criar novos registos de stock.',
+    });
+  }
   const result = storage.createStockRecord(req.body, req.user!);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
@@ -660,7 +670,12 @@ app.get('/api/pdes', authenticateToken, limited((req, res) => {
 }, { label: 'pdes:list' }));
 
 app.post('/api/pdes', authenticateToken, limited((req, res) => {
-  const { articleId, batchNumber, arrivalDate, expirationDate, defectReason, notes, photos } = req.body;
+  if (req.user!.role === 'GESTOR_STOCKS_PDE') {
+    return res.status(403).json({
+      error: 'O perfil de Gestor de Stocks & PDE não tem permissão para criar novos pedidos de PDE.',
+    });
+  }
+  const { articleId, batchNumber, arrivalDate, expirationDate, quantityUnits, defectReason, notes, photos } = req.body;
 
   const result = storage.createPde(
     {
@@ -668,6 +683,7 @@ app.post('/api/pdes', authenticateToken, limited((req, res) => {
       batchNumber,
       arrivalDate,
       expirationDate,
+      quantityUnits,
       defectReason,
       notes,
       photos,

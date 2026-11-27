@@ -393,7 +393,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ currentUser, selectedDate 
 
             <p className="text-sm font-semibold text-on-surface">{task.description}</p>
 
-            {task.ipaPoints && (
+            {canViewAll && task.ipaPoints && (
               <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-on-surface-muted pt-0.5">
                 <span className="font-sans font-bold text-amber-ink">IPA:</span>
                 <span>Por assinalar {formatIpaOption(task.ipaPoints.pending)}</span>

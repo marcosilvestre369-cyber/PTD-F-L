@@ -65,6 +65,7 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
 
   const isAdmin = currentUser.role === 'ADMIN';
   const canManage = isAdmin || currentUser.role === 'ADMIN_2' || currentUser.role === 'GESTOR_STOCKS_PDE';
+  const canCreate = currentUser.role !== 'GESTOR_STOCKS_PDE';
 
   useEffect(() => {
     setRegistrationDate(selectedDate);
@@ -128,6 +129,7 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
   }, [filterType, filterStatus, debouncedFilterSearch]);
 
   const handleOpenCreate = (type: StockType) => {
+    if (!canCreate) return;
     setRecordType(type);
     setRegistrationDate(selectedDate);
     setStockDate(selectedDate);
@@ -440,24 +442,26 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
           </p>
         </div>
 
-        {/* Botões de Ação para registar novo stock */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleOpenCreate('EXCESSO')}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-primary hover:bg-primary-hover text-on-primary rounded-xl text-xs font-bold shadow-xs hover:shadow transition-all cursor-pointer"
-          >
-            <PackagePlus className="w-4 h-4 text-amber-brand" />
-            <span>+ Excesso de Stock</span>
-          </button>
+        {/* Botões de Ação para registar novo stock (ocultos para Gestor de Stocks & PDE) */}
+        {canCreate && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleOpenCreate('EXCESSO')}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-primary hover:bg-primary-hover text-on-primary rounded-xl text-xs font-bold shadow-xs hover:shadow transition-all cursor-pointer"
+            >
+              <PackagePlus className="w-4 h-4 text-amber-brand" />
+              <span>+ Excesso de Stock</span>
+            </button>
 
-          <button
-            onClick={() => handleOpenCreate('ROTURA')}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-danger-tint hover:bg-danger-border/40 text-danger-ink border border-danger-border rounded-xl text-xs font-bold shadow-xs hover:shadow transition-all cursor-pointer"
-          >
-            <AlertTriangle className="w-4 h-4 text-danger" />
-            <span>+ Rotura / Revisão</span>
-          </button>
-        </div>
+            <button
+              onClick={() => handleOpenCreate('ROTURA')}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-danger-tint hover:bg-danger-border/40 text-danger-ink border border-danger-border rounded-xl text-xs font-bold shadow-xs hover:shadow transition-all cursor-pointer"
+            >
+              <AlertTriangle className="w-4 h-4 text-danger" />
+              <span>+ Rotura / Revisão</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Barra de Filtros e Pesquisa Integrada */}
@@ -615,7 +619,7 @@ export const StocksView: React.FC<StocksViewProps> = ({ currentUser, selectedDat
       )}
 
       {/* Modal de Criação de Registo de Stock */}
-      {isCreateModalOpen && (
+      {canCreate && isCreateModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-surface-card rounded-2xl shadow-xl border border-line max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-5 py-4 border-b-2 border-amber-brand flex items-center justify-between bg-hero-bg text-hero-fg">

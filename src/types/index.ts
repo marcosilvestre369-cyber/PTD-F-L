@@ -340,6 +340,7 @@ export interface PdeRequest {
   articleDescription: string;
   category?: string;
   unit?: string;
+  quantityUnits?: number; // quantidade em unidades (inteiro > 0)
   batchNumber: string; // lote do artigo
   arrivalDate: string; // dia em que chegou (YYYY-MM-DD, estritamente do próprio dia)
   expirationDate: string; // validade do artigo (YYYY-MM-DD)

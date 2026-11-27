@@ -540,6 +540,7 @@ export const api = {
     batchNumber: string;
     arrivalDate: string;
     expirationDate: string;
+    quantityUnits?: number;
     defectReason: string;
     notes?: string;
     photos?: string[];

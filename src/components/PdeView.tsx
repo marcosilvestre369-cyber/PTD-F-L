@@ -39,6 +39,7 @@ const DEFECT_REASONS = [
 export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
   const isAdmin = currentUser.role === 'ADMIN';
   const canDecide = isAdmin || currentUser.role === 'ADMIN_2' || currentUser.role === 'GESTOR_STOCKS_PDE';
+  const canCreate = currentUser.role !== 'GESTOR_STOCKS_PDE';
 
   const [pdes, setPdes] = useState<PdeRequest[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -52,6 +53,7 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [articleSearch, setArticleSearch] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
+  const [quantityUnits, setQuantityUnits] = useState<string>('');
 
   // Data de hoje em formato YYYY-MM-DD (Lisboa)
   const todayStr = getTodayDateString();
@@ -205,6 +207,16 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
       return;
     }
 
+    let parsedQuantityUnits: number | undefined;
+    if (quantityUnits.trim() !== '') {
+      const qty = Number(quantityUnits);
+      if (!Number.isInteger(qty) || qty <= 0) {
+        setFormError('A quantidade em unidades deve ser um número inteiro superior a zero.');
+        return;
+      }
+      parsedQuantityUnits = qty;
+    }
+
     setSubmitting(true);
     try {
       await api.createPde({
@@ -212,6 +224,7 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
         batchNumber: batchNumber.trim().toUpperCase(),
         arrivalDate,
         expirationDate,
+        quantityUnits: parsedQuantityUnits,
         defectReason,
         notes: notes.trim() || undefined,
         photos,
@@ -221,6 +234,7 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
       setSelectedArticle(null);
       setArticleSearch('');
       setBatchNumber('');
+      setQuantityUnits('');
       setArrivalDate(todayStr);
       setExpirationDate('');
       setNotes('');
@@ -301,17 +315,20 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setShowCreateModal(true);
-            setArrivalDate(todayStr);
-            setFormError(null);
-          }}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-on-primary bg-primary hover:bg-primary-hover active:scale-95 transition-all shadow-xs cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4 text-amber-brand" />
-          <span>+ NOVO PEDIDO DE PDE</span>
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => {
+              setShowCreateModal(true);
+              setArrivalDate(todayStr);
+              setQuantityUnits('');
+              setFormError(null);
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-on-primary bg-primary hover:bg-primary-hover active:scale-95 transition-all shadow-xs cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4 text-amber-brand" />
+            <span>+ NOVO PEDIDO DE PDE</span>
+          </button>
+        )}
       </div>
 
       {/* KPI Cards Simplificados */}
@@ -408,9 +425,11 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
           <div className="py-16 text-center text-on-surface-muted space-y-2">
             <FileText className="w-10 h-10 text-amber-brand mx-auto" />
             <p className="text-sm font-bold text-on-surface">Nenhum pedido de PDE encontrado</p>
-            <p className="text-xs text-on-surface-subtle">
-              Clique em "+ NOVO PEDIDO DE PDE" para registar uma anomalia de qualidade.
-            </p>
+            {canCreate && (
+              <p className="text-xs text-on-surface-subtle">
+                Clique em "+ NOVO PEDIDO DE PDE" para registar uma anomalia de qualidade.
+              </p>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-line-subtle">
@@ -454,11 +473,17 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                       </span>
                     </div>
 
-                    {/* Dados de lote e datas */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    {/* Dados de lote, quantidade e datas */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                       <div className="bg-surface-container p-2 rounded-lg border border-line">
                         <span className="block text-[10px] text-on-surface-muted font-semibold">LOTE</span>
                         <span className="font-mono font-bold text-on-surface">{pde.batchNumber}</span>
+                      </div>
+                      <div className="bg-surface-container p-2 rounded-lg border border-line">
+                        <span className="block text-[10px] text-on-surface-muted font-semibold">QUANTIDADE</span>
+                        <span className="font-mono font-bold text-on-surface">
+                          {pde.quantityUnits ? `${pde.quantityUnits} un.` : '—'}
+                        </span>
                       </div>
                       <div className="bg-surface-container p-2 rounded-lg border border-line">
                         <span className="block text-[10px] text-on-surface-muted font-semibold">CHEGADA</span>
@@ -468,9 +493,9 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                         <span className="block text-[10px] text-on-surface-muted font-semibold">VALIDADE</span>
                         <span className="font-bold text-on-surface">{pde.expirationDate}</span>
                       </div>
-                      <div className="bg-surface-container p-2 rounded-lg border border-line">
+                      <div className="bg-surface-container p-2 rounded-lg border border-line col-span-2 sm:col-span-1">
                         <span className="block text-[10px] text-on-surface-muted font-semibold">MOTIVO</span>
-                        <span className="font-bold text-on-surface truncate block">{pde.defectReason}</span>
+                        <span className="font-bold text-on-surface truncate block" title={pde.defectReason}>{pde.defectReason}</span>
                       </div>
                     </div>
 
@@ -613,7 +638,7 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
       </div>
 
       {/* Modal: Novo Pedido de PDE */}
-      {showCreateModal && (
+      {canCreate && showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
           <div className="bg-surface-card rounded-3xl border border-line shadow-xl w-full max-w-2xl my-6 overflow-hidden">
             <div className="p-4 sm:p-6 bg-hero-bg text-hero-fg border-b-2 border-amber-brand flex items-center justify-between">
@@ -701,8 +726,8 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                 )}
               </div>
 
-              {/* 2. Lote e Validade */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 2. Lote, Validade e Quantidade (Unidades) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-on-surface uppercase tracking-wider">
                     Lote do Artigo *
@@ -726,6 +751,22 @@ export const PdeView: React.FC<PdeViewProps> = ({ currentUser }) => {
                     value={expirationDate}
                     onChange={e => setExpirationDate(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-surface-container border border-line rounded-xl text-on-surface font-bold focus:bg-surface-card focus:ring-2 focus:ring-amber-brand focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-on-surface uppercase tracking-wider">
+                    Quantidade (Unidades)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    value={quantityUnits}
+                    onChange={e => setQuantityUnits(e.target.value)}
+                    placeholder="Ex: 12"
+                    className="w-full px-3 py-2 text-xs bg-surface-container border border-line rounded-xl text-on-surface font-mono font-bold focus:bg-surface-card focus:ring-2 focus:ring-amber-brand focus:outline-none"
                   />
                 </div>
               </div>

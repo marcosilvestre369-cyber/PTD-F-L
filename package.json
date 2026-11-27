@@ -44,6 +44,7 @@
   },
   "overrides": {
     "@grpc/grpc-js": "^1.14.5",
-    "esbuild": "$esbuild"
+    "esbuild": "$esbuild",
+    "websocket-driver": "^0.8.1"
   }
 }

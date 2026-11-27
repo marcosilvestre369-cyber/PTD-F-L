@@ -388,6 +388,7 @@ export function exportDailyReportPdf(report: DailyReportSummary) {
       const pdeRows = report.pdeRecords.map(p => [
         p.sku,
         p.articleDescription,
+        p.quantityUnits ? `${p.quantityUnits} un.` : '—',
         p.batchNumber,
         formatDatePt(p.expirationDate),
         p.defectReason,
@@ -397,10 +398,10 @@ export function exportDailyReportPdf(report: DailyReportSummary) {
         p.resolutionNotes || '—',
       ]);
 
-      // 16+38+15+16+30+22+12+14+19 = 182mm (enquadra perfeitamente na largura A4)
+      // 16+33+12+15+16+26+22+12+14+16 = 182mm (enquadra perfeitamente na largura A4)
       autoTable(doc, {
         startY: currentY,
-        head: [['SKU', 'Artigo', 'Lote', 'Validade', 'Motivo Qualidade', 'Colaborador', 'Fotos', 'Estado', 'Resolução']],
+        head: [['SKU', 'Artigo', 'Qtd.', 'Lote', 'Validade', 'Motivo Qualidade', 'Colaborador', 'Fotos', 'Estado', 'Resolução']],
         body: pdeRows,
         theme: 'grid',
         styles: {
@@ -417,14 +418,15 @@ export function exportDailyReportPdf(report: DailyReportSummary) {
         },
         columnStyles: {
           0: { cellWidth: 16 },
-          1: { cellWidth: 38 },
-          2: { cellWidth: 15 },
-          3: { cellWidth: 16 },
-          4: { cellWidth: 30 },
-          5: { cellWidth: 22 },
-          6: { cellWidth: 12, halign: 'center' },
-          7: { cellWidth: 14, halign: 'center' },
-          8: { cellWidth: 19 },
+          1: { cellWidth: 33 },
+          2: { cellWidth: 12, halign: 'center' },
+          3: { cellWidth: 15 },
+          4: { cellWidth: 16 },
+          5: { cellWidth: 26 },
+          6: { cellWidth: 22 },
+          7: { cellWidth: 12, halign: 'center' },
+          8: { cellWidth: 14, halign: 'center' },
+          9: { cellWidth: 16 },
         },
         margin: { left: margin, right: margin },
       });
@@ -585,6 +587,7 @@ export function exportSinglePdeA4Pdf(pde: PdeRequest) {
     body: [
       ['Artigo', pde.articleDescription],
       ['Código SKU', pde.sku],
+      ['Quantidade (Unidades)', pde.quantityUnits ? `${pde.quantityUnits} un.` : '—'],
       ['Lote da Mercadoria', pde.batchNumber],
       ['Data de Chegada', formatDatePt(pde.arrivalDate)],
       ['Data de Validade', formatDatePt(pde.expirationDate)],

@@ -708,6 +708,7 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
                         <tr>
                           <th className="py-2.5 px-3.5">SKU</th>
                           <th className="py-2.5 px-3.5">Artigo</th>
+                          <th className="py-2.5 px-3.5">Qtd.</th>
                           <th className="py-2.5 px-3.5">Lote</th>
                           <th className="py-2.5 px-3.5">Validade</th>
                           <th className="py-2.5 px-3.5">Motivo de Qualidade</th>
@@ -725,6 +726,9 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({ selectedDate }
                             </td>
                             <td className="py-2.5 px-3.5 font-semibold text-on-surface">
                               {p.articleDescription}
+                            </td>
+                            <td className="py-2.5 px-3.5 font-mono text-on-surface-muted whitespace-nowrap">
+                              {p.quantityUnits ? `${p.quantityUnits} un.` : '—'}
                             </td>
                             <td className="py-2.5 px-3.5 font-mono text-on-surface-muted whitespace-nowrap">
                               {p.batchNumber}

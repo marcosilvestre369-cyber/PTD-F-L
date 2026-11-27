@@ -247,8 +247,9 @@ class StorageManager {
           yasmin.updatedAt = new Date().toISOString();
         }
 
-        // Corrigir Nº Mecanográfico de Henrique Sousa (56813 -> 508913)
-        this.migrateCollaboratorNumber('56813', '508913', 'HENRIQUE SOUSA');
+        // Corrigir Nº Mecanográfico de Henrique Sousa (56813 / 508913 -> 50813)
+        this.migrateCollaboratorNumber('56813', '50813', 'HENRIQUE SOUSA');
+        this.migrateCollaboratorNumber('508913', '50813', 'HENRIQUE SOUSA');
 
         // Garantir que todos os colaboradores ativos entram diretamente pelo número
         this.store.collaborators.forEach(c => {
@@ -685,11 +686,36 @@ class StorageManager {
           changed = true;
         }
 
-        if (this.migrateCollaboratorNumber('56813', '508913', 'HENRIQUE SOUSA')) {
+        let henriqueMigrated = false;
+        if (this.migrateCollaboratorNumber('56813', '50813', 'HENRIQUE SOUSA')) {
           changed = true;
+          henriqueMigrated = true;
+        }
+        if (this.migrateCollaboratorNumber('508913', '50813', 'HENRIQUE SOUSA')) {
+          changed = true;
+          henriqueMigrated = true;
         }
         if (remote.collaborators?.some(c => c.id === 'colab-56813')) {
           await deleteDocument('collaborators', 'colab-56813');
+        }
+        if (remote.collaborators?.some(c => c.id === 'colab-508913')) {
+          await deleteDocument('collaborators', 'colab-508913');
+        }
+        if (henriqueMigrated) {
+          const henrique = this.store.collaborators.find(c => c.mecanographicNumber === '50813');
+          if (henrique) {
+            await syncDocument('collaborators', henrique.id, henrique);
+          }
+          const henriqueTasks = this.store.tasks.filter(t => t.mecanographicNumber === '50813');
+          if (henriqueTasks.length > 0) await syncDocumentsBatch('tasks', henriqueTasks);
+          const henriqueMeals = this.store.meals.filter(m => m.mecanographicNumber === '50813');
+          if (henriqueMeals.length > 0) await syncDocumentsBatch('meals', henriqueMeals);
+          const henriqueStocks = this.store.stocks.filter(s => s.authorNumber === '50813');
+          if (henriqueStocks.length > 0) await syncDocumentsBatch('stocks', henriqueStocks);
+          const henriquePdes = this.store.pdes.filter(
+            p => p.submittedByNumber === '50813' || p.resolvedByNumber === '50813'
+          );
+          if (henriquePdes.length > 0) await syncDocumentsBatch('pdes', henriquePdes);
         }
 
         // Aplicar reset oficial de pré-arranque (23/11/2026) também sobre os dados vindos do Firestore
@@ -1813,6 +1839,13 @@ class StorageManager {
     },
     author: Collaborator
   ): { success: boolean; error?: string; record?: StockRecord; warning?: string } {
+    if (author.role === 'GESTOR_STOCKS_PDE') {
+      return {
+        success: false,
+        error: 'O perfil de Gestor de Stocks & PDE não tem permissão para criar novos registos de stock.',
+      };
+    }
+
     const article = this.getArticleById(payload.articleId);
     if (!article) {
       return { success: false, error: 'Artigo não encontrado no catálogo.' };
@@ -2627,14 +2660,34 @@ class StorageManager {
       batchNumber: string;
       arrivalDate: string;
       expirationDate: string;
+      quantityUnits?: number;
       defectReason: string;
       notes?: string;
       photos?: string[];
     },
     user: Collaborator
   ): { success: boolean; pde?: PdeRequest; error?: string } {
+    if (user.role === 'GESTOR_STOCKS_PDE') {
+      return {
+        success: false,
+        error: 'O perfil de Gestor de Stocks & PDE não tem permissão para criar novos pedidos de PDE.',
+      };
+    }
+
     if (!data.articleId || !data.batchNumber || !data.arrivalDate || !data.expirationDate || !data.defectReason) {
       return { success: false, error: 'Todos os campos obrigatórios devem ser preenchidos.' };
+    }
+
+    let parsedQuantityUnits: number | undefined;
+    if (data.quantityUnits !== undefined && data.quantityUnits !== null && (data.quantityUnits as unknown) !== '') {
+      const qty = Number(data.quantityUnits);
+      if (!Number.isInteger(qty) || qty <= 0) {
+        return {
+          success: false,
+          error: 'A quantidade em unidades deve ser um número inteiro superior a zero.',
+        };
+      }
+      parsedQuantityUnits = qty;
     }
 
     // REGRA ESTRITA DO UTILIZADOR: "só é valido o pde se o artigo tiver chegado no proprio dia"
@@ -2661,6 +2714,7 @@ class StorageManager {
       articleDescription: article.description,
       category: article.category,
       unit: article.unit,
+      quantityUnits: parsedQuantityUnits,
       batchNumber: data.batchNumber.trim().toUpperCase(),
       arrivalDate: data.arrivalDate,
       expirationDate: data.expirationDate,
@@ -2673,13 +2727,15 @@ class StorageManager {
       status: 'PENDENTE',
     };
 
+    const qtyLabel = newPde.quantityUnits ? `, Qtd: ${newPde.quantityUnits} un.` : '';
+
     this.store.pdes.unshift(newPde);
     this.logAudit(
       user.mecanographicNumber,
       user.name,
       'CRIAR_PDE',
       'PDE',
-      `Pedido de PDE de qualidade criado para ${article.sku} - ${article.description} (Lote: ${newPde.batchNumber}, Motivo: ${newPde.defectReason}) com ${newPde.photos.length} fotos`
+      `Pedido de PDE de qualidade criado para ${article.sku} - ${article.description} (Lote: ${newPde.batchNumber}${qtyLabel}, Motivo: ${newPde.defectReason}) com ${newPde.photos.length} fotos`
     );
 
     // Notificar Administradores (Admin / Admin 2) e Gestores de Stocks & PDE sobre o novo pedido PDE
@@ -2699,7 +2755,7 @@ class StorageManager {
         senderName: user.name,
         category: 'PDE',
         title: 'Novo Pedido PDE de Qualidade',
-        message: `${user.name} submeteu PDE para [${newPde.sku}] ${newPde.articleDescription} (Lote: ${newPde.batchNumber} · ${newPde.defectReason}).`,
+        message: `${user.name} submeteu PDE para [${newPde.sku}] ${newPde.articleDescription} (Lote: ${newPde.batchNumber}${newPde.quantityUnits ? ` · ${newPde.quantityUnits} un.` : ''} · ${newPde.defectReason}).`,
         pdeId: newPde.id,
         date: newPde.arrivalDate,
         createdAt: newPde.submittedAt,
